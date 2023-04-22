@@ -9,6 +9,7 @@ const TOPIC_NAME: &str = "/chatter";
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
+    // Spawn a Tokio task to run the ROS master
     let t_core = tokio::spawn(async move {
         let uri = Url::parse(ROS_MASTER_URI).unwrap();
         let socket_address = ros_core_rs::url_to_socket_addr(&uri)?;
@@ -16,8 +17,10 @@ async fn main() -> anyhow::Result<()> {
         master.serve().await
     });
 
+    // Initialize the ROS node
     rosrust::loop_init("talker_listener", 1000);
 
+    // Spawn a Tokio task to publish messages
     let t_talker = tokio::spawn(async move {
         // Create publisher
         let chatter_pub = rosrust::publish(TOPIC_NAME, 100).unwrap();
@@ -44,8 +47,9 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Wait for the publisher.
-    let master_client = MasterClient::new(ROS_MASTER_URI);
+    // Wait for the publisher to be available
+    let master_url = Url::parse(ROS_MASTER_URI).expect("Failed to parse  URL.");
+    let master_client = MasterClient::new(&master_url);
     loop {
         let (_, _, published_topics) = master_client.get_published_topics("", "").await.unwrap();
         if published_topics
@@ -57,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
         thread::sleep(std::time::Duration::from_millis(1000));
     }
 
+    // Spawn a Tokio task to subscribe to messages
     let t_listener = tokio::spawn(async move {
         // Create subscriber
         // The subscriber is stopped when the returned object is destroyed

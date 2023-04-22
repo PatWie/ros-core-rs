@@ -1,14 +1,12 @@
 [package]
 authors = ["PatWie <mail@patwie.com>"]
-description = "Pure Rust implementation of a ROS core"
+description = "A pure Rust implementation of the Robot Operating System (ROS) core."
 license = "MIT"
 name = "ros-core-rs"
 readme = "README.md"
 repository = "https://github.com/patwie/ros-core-rs"
 version = "0.2.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 dxr = { version = "0.5.3", features = ["server", "server-axum"] }
@@ -19,8 +17,11 @@ chrono = "0.4.24"
 paste = "1.0.12"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"]}
 url = "2.3.1"
+
 [dev-dependencies]
-# tokio = { version = "1", features = sender["macros", "rt-multi-thread"]}
 rosrust = "0.9"
 rosrust_msg = "0.1"
+doc-comment = "0.3.3"
 
+[features]
+doctest = []

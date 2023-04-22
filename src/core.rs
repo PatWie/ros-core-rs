@@ -20,6 +20,32 @@ pub type Publishers = HashMap<String, HashSet<String>>;
 pub type Parameters = HashMap<String, Value>;
 pub type ParameterSubscriptions = HashMap<String, HashMap<String, String>>;
 
+/// An enum that represents the different types of endpoints that can be accessed in the ROS Master API.
+///
+/// # Variants
+///
+/// * `RegisterService`: Registers a service with the ROS Master.
+/// * `UnRegisterService`: Unregisters a service with the ROS Master.
+/// * `RegisterSubscriber`: Registers a subscriber with the ROS Master.
+/// * `UnregisterSubscriber`: Unregisters a subscriber with the ROS Master.
+/// * `RegisterPublisher`: Registers a publisher with the ROS Master.
+/// * `UnregisterPublisher`: Unregisters a publisher with the ROS Master.
+/// * `LookupNode`: Looks up a node with the ROS Master.
+/// * `GetPublishedTopics`: Gets the published topics from the ROS Master.
+/// * `GetTopicTypes`: Gets the topic types from the ROS Master.
+/// * `GetSystemState`: Gets the system state from the ROS Master.
+/// * `GetUri`: Gets the URI from the ROS Master.
+/// * `LookupService`: Looks up a service with the ROS Master.
+/// * `DeleteParam`: Deletes a parameter from the ROS Parameter Server.
+/// * `SetParam`: Sets a parameter on the ROS Parameter Server.
+/// * `GetParam`: Gets a parameter from the ROS Parameter Server.
+/// * `SearchParam`: Searches for a parameter on the ROS Parameter Server.
+/// * `SubscribeParam`: Subscribes to a parameter on the ROS Parameter Server.
+/// * `UnsubscribeParam`: Unsubscribes from a parameter on the ROS Parameter Server.
+/// * `HasParam`: Checks if a parameter exists on the ROS Parameter Server.
+/// * `GetParamNames`: Gets the names of parameters on the ROS Parameter Server.
+/// * `SystemMultiCall`: Performs multiple ROS Master API calls in a single request.
+/// * `Default`: The default endpoint used when no other endpoint is specified.
 enum MasterEndpoints {
     RegisterService,
     UnRegisterService,
@@ -74,33 +100,39 @@ impl MasterEndpoints {
     }
 }
 
+/// Struct containing information about ROS data.
 pub struct RosData {
-    service_list: RwLock<Services>,
-    nodes: RwLock<Nodes>,
-    topics: RwLock<Topics>,
-    subscriptions: RwLock<Subscriptions>,
-    publications: RwLock<Publishers>,
-    parameters: RwLock<Parameters>,
-    parameter_subscriptions: RwLock<ParameterSubscriptions>,
-    uri: std::net::SocketAddr,
+    // RwLocks to allow for concurrent read/write access to data
+    service_list: RwLock<Services>, // stores information about available services
+    nodes: RwLock<Nodes>,           // stores information about nodes connected to the ROS network
+    topics: RwLock<Topics>,         // stores information about available topics
+    subscriptions: RwLock<Subscriptions>, // stores information about topic subscriptions
+    publications: RwLock<Publishers>, // stores information about topic publishers
+    parameters: RwLock<Parameters>, // stores information about ROS parameters
+    parameter_subscriptions: RwLock<ParameterSubscriptions>, // stores information about parameter subscriptions
+    uri: std::net::SocketAddr,                               // the address of the ROS network
 }
 
 pub struct Master {
     data: Arc<RosData>,
 }
 
-// registerService(caller_id, service, service_api, caller_api)
-//
-// Register the caller as a provider of the specified service.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID
-// service (str) Fully-qualified name of service
-// service_api (str) ROSRPC Service URI
-// caller_api (str) XML-RPC URI of caller node
-//
-// Returns (int, str, int) (code, statusMessage, ignore)
+/// Handler for registering the caller as a provider of the specified service.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+/// - `service` - Fully-qualified name of service (string)
+/// - `service_api` - ROSRPC Service URI (string)
+/// - `caller_api` - XML-RPC URI of caller node (string)
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `ignore` - ignore (integer)
 struct RegisterServiceHandler {
     data: Arc<RosData>,
 }
@@ -129,22 +161,24 @@ impl Handler for RegisterServiceHandler {
     }
 }
 
-// unregisterService(caller_id, service, service_api)
-//
-// Unregister the caller as a provider of the specified service.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID
-// service (str) Fully-qualified name of service
-// service_api (str) API URI of service to unregister. Unregistration will only occur if current
-//     registration matches.
-//
-// Returns (int, str, int) (code, statusMessage, numUnregistered).
-//
-// Number of unregistrations (either 0 or 1). If this is zero it means that the caller was not
-// registered as a service provider. The call still succeeds as the intended final state is
-// reached.
+/// Handler for unregistering the caller as a provider of the specified service.
+///
+/// # Parameters
+///
+/// - caller_id - ROS caller ID (string)
+/// - service - Fully-qualified name of service (string)
+/// - service_api - API URI of service to unregister. Unregistration will only occur if current
+/// registration matches. (string)
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - code - response code (integer)
+/// - statusMessage - status message (string)
+/// - numUnregistered - number of unregistrations (either 0 or 1). If this is zero it means that the
+/// caller was not registered as a service provider. The call still succeeds as the intended final
+/// state is reached. (integer)
 struct UnRegisterServiceHandler {
     data: Arc<RosData>,
 }
@@ -156,36 +190,39 @@ impl Handler for UnRegisterServiceHandler {
         type Request = (String, String, String);
         let (caller_id, service, _service_api) = Request::try_from_params(params)?;
 
-        if let Some(providers) = self.data.service_list.write().unwrap().get_mut(&service) {
-            let removed = providers.remove(&caller_id).is_some();
-            self.data
-                .service_list
-                .write()
-                .unwrap()
-                .retain(|_, v| !v.is_empty());
-            return Ok((1, "", if removed { 1 } else { 0 }).try_to_value()?);
+        let mut service_list = self.data.service_list.write().unwrap();
+
+        let removed = if let Some(providers) = service_list.get_mut(&service) {
+            providers.remove(&caller_id);
+            providers.is_empty()
         } else {
-            return Ok((1, "", 0).try_to_value()?);
+            false
+        };
+
+        if removed {
+            service_list.remove(&service);
         }
+
+        Ok((1, "", if removed { 1 } else { 0 }).try_to_value()?)
     }
 }
 
-// registerSubscriber(caller_id, topic, topic_type, caller_api)
-//
-// Subscribe the caller to the specified topic. In addition to receiving a list of current
-// publishers, the subscriber will also receive notifications of new publishers via the
-// publisherUpdate API.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID
-// topic (str) Fully-qualified name of topic.
-// topic_type (str) Datatype for topic. Must be a package-resource name, i.e. the .msg name.
-// caller_api (str) API URI of subscriber to register. Will be used for new publisher notifications.
-//
-// Returns (int, str, [str]) (code, statusMessage, publishers)
-//
-// Publishers is a list of XMLRPC API URIs for nodes currently publishing the specified topic.
+/// Handler for registering the caller as a subscriber to the specified topic.
+///
+/// # Parameters
+///
+/// - caller_id - ROS caller ID (string)
+/// - topic - Fully-qualified name of the topic (string)
+/// - topic_type - Datatype for topic. Must be a package-resource name, i.e. the .msg name (string)
+/// - caller_api - API URI of subscriber to register. Will be used for new publisher notifications (string)
+///
+/// # Returns
+///
+/// A tuple of integers and a vector of strings representing the response:
+///
+/// - code - response code (integer)
+/// - statusMessage - status message (string)
+/// - publishers - a list of XMLRPC API URIs for nodes currently publishing the specified topic (vector of strings).
 struct RegisterSubscriberHandler {
     data: Arc<RosData>,
 }
@@ -238,20 +275,23 @@ impl Handler for RegisterSubscriberHandler {
     }
 }
 
-// unregisterSubscriber(caller_id, topic, caller_api)
-//
-// Unregister the caller as a publisher of the topic.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID
-// topic (str) Fully-qualified name of topic.
-// caller_api (str) API URI of subscriber to unregister. Unregistration will only occur if current registration matches.
-//
-// Returns (int, str, int) (code, statusMessage, numUnsubscribed)
-//
-// If numUnsubscribed is zero it means that the caller was not registered as a subscriber. The call
-// still succeeds as the intended final state is reached.
+/// Handler for unregistering the caller as a publisher of the topic.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+/// - `topic` - Fully-qualified name of topic (string)
+/// - `caller_api` - API URI of subscriber to unregister. Unregistration will only occur if current
+///   registration matches. (string)
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `numUnsubscribed` - number of unsubscriptions (either 0 or 1). If this is zero it means that the caller was not
+/// registered as a subscriber. The call still succeeds as the intended final state is reached.
 struct UnRegisterSubscriberHandler {
     data: Arc<RosData>,
 }
@@ -282,20 +322,22 @@ impl Handler for UnRegisterSubscriberHandler {
     }
 }
 
-// registerPublisher(caller_id, topic, topic_type, caller_api)
-//
-// Register the caller as a publisher the topic.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID
-// topic (str) Fully-qualified name of topic to register.
-// topic_type (str) Datatype for topic. Must be a package-resource name, i.e. the .msg name.
-// caller_api (str) API URI of publisher to register.
-//
-// Returns (int, str, [str]) (code, statusMessage, subscriberApis)
-//
-// List of current subscribers of topic in the form of XMLRPC URIs.
+/// Handler for registering the caller as a publisher of the specified topic.
+///
+/// # Parameters
+///
+/// - caller_id - ROS caller ID (string)
+/// - topic - Fully-qualified name of topic to register (string)
+/// - topic_type - Datatype for topic. Must be a package-resource name, i.e. the .msg name (string)
+/// - caller_api - API URI of publisher to register (string)
+///
+/// # Returns
+///
+/// A tuple of integers, a string, and a list of strings representing the response:
+///
+/// - code - response code (integer)
+/// - statusMessage - status message (string)
+/// - subscriberApis - list of current subscribers of topic in the form of XMLRPC URIs (list of strings)
 struct RegisterPublisherHandler {
     data: Arc<RosData>,
 }
@@ -314,6 +356,8 @@ impl Handler for RegisterPublisherHandler {
             }
         }
 
+        // TODO(patwie): Maybe holding the lock for a longer time?
+        // let mut publications = self.data.publications.write().unwrap();
         self.data
             .publications
             .write()
@@ -371,21 +415,22 @@ impl Handler for RegisterPublisherHandler {
     }
 }
 
-// unregisterPublisher(caller_id, topic, caller_api)
-//
-// Unregister the caller as a publisher of the topic.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID
-// topic (str) Fully-qualified name of topic to unregister.
-// caller_api (str) API URI of publisher to unregister. Unregistration will only occur if current
-//      registration matches.
-//
-// Returns (int, str, int) (code, statusMessage, numUnregistered)
-//
-// If numUnregistered is zero it means that the caller was not registered as a publisher. The call
-// still succeeds as the intended final state is reached.
+/// Handler for unregistering the caller as a publisher of the topic.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+/// - `topic` - Fully-qualified name of topic to unregister (string)
+/// - `caller_api` - API URI of publisher to unregister (string)
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `numUnregistered` - number of unregistrations (either 0 or 1). If this is zero it means that the
+/// caller was not registered as a publisher. The call still succeeds as the intended final state is reached.
 struct UnRegisterPublisherHandler {
     data: Arc<RosData>,
 }
@@ -425,17 +470,21 @@ impl Handler for UnRegisterPublisherHandler {
     }
 }
 
-// lookupNode(caller_id, node_name)
-//
-// Get the XML-RPC URI of the node with the associated name/caller_id. This API is for looking
-// information about publishers and subscribers. Use lookupService instead to lookup ROS-RPC URIs.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID
-// node (str) Name of node to lookup
-//
-// Returns (int, str, str) (code, statusMessage, URI)
+/// Handler for looking up the XML-RPC URI of the node with the associated name/caller_id.
+///
+/// # Parameters
+///
+/// - caller_id - ROS caller ID (string)
+/// - node_name - Name of node to lookup (string)
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - code - response code (integer)
+/// - statusMessage - status message (string)
+/// - URI - XML-RPC URI of the node (string). This API is for looking up information about publishers
+/// and subscribers. Use lookupService instead to lookup ROS-RPC URIs.
 struct LookupNodeHandler {
     data: Arc<RosData>,
 }
@@ -456,18 +505,23 @@ impl Handler for LookupNodeHandler {
     }
 }
 
-// getPublishedTopics(caller_id, subgraph)
-//
-// Get list of topics that can be subscribed to. This does not return topics that have no
-// publishers. See getSystemState() to get more comprehensive list.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID
-// subgraph (str) Restrict topic names to match within the specified subgraph. Subgraph namespace
-//      is resolved relative to the caller's namespace. Use empty string to specify all names.
-//
-// Returns (int, str, [[str, str],]) (code, statusMessage, [ [topic1, type1]...[topicN, typeN] ])
+/// Handler for getting the list of topics that can be subscribed to.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+/// - `subgraph` - Restrict topic names to match within the specified subgraph. Subgraph namespace
+///   is resolved relative to the caller's namespace. Use empty string to specify all names (string).
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `topics` - a list of lists containing topic names and types, e.g. `[[topic1, type1], [topic2, type2]]`.
+/// The list represents topics that can be subscribed to, but not necessarily all topics available in the system.
+/// Use `getSystemState()` for a more comprehensive list.
 struct GetPublishedTopicsHandler {
     data: Arc<RosData>,
 }
@@ -490,17 +544,19 @@ impl Handler for GetPublishedTopicsHandler {
     }
 }
 
-// getTopicTypes(caller_id)
-//
-// Retrieve list topic names and their types.
-//
-// Parameters
-//rosout
-// caller_id (str) ROS caller ID
-//
-// Returns (int, str, [ [str,str] ]) (code, statusMessage, topicTypes)
-//
-// topicTypes is a list of [topicName, topicType] pairs.
+/// Handler for retrieving the list of topic names and their types.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+///
+/// # Returns
+///
+/// A tuple of integers, a string representing the response, and a list of lists of strings:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `topicTypes` - a list of lists of strings representing the [topicName, topicType] pairs.
 struct GetTopicTypesHandler {
     data: Arc<RosData>,
 }
@@ -524,15 +580,23 @@ impl Handler for GetTopicTypesHandler {
     }
 }
 
-// getSystemState(caller_id)
-//
-// Retrieve list representation of system state (i.e. publishers, subscribers, and services).
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID
-//
-// Returns (int, str, [ [str,[str] ], [str,[str] ], [str,[str] ] ]) (code, statusMessage, systemState)
+/// Handler for retrieving a list representation of the ROS system state.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `systemState` - a list of tuples representing the system state:
+///     - Each tuple contains two elements: a string representing the topic/service name, and a list of strings
+///       representing the associated publishers/subscribers/servers/clients.
+///     - The first tuple contains the list of publishers, the second contains the list of subscribers, and the third
+///       contains the list of services.
 struct GetSystemStateHandler {
     data: Arc<RosData>,
 }
@@ -586,15 +650,19 @@ impl Handler for GetSystemStateHandler {
     }
 }
 
-// getUri(caller_id)
-//
-// Get the URI of the master.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID
-//
-// Returns (int, str, str) (code, statusMessage, masterURI)
+/// Handler for getting the URI of the master.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `masterURI` - URI of the ROS master (string)
 struct GetUriHandler {
     data: Arc<RosData>,
 }
@@ -610,18 +678,21 @@ impl Handler for GetUriHandler {
     }
 }
 
-// lookupService(caller_id, service)
-//
-// Lookup all provider of a particular service.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID
-// service (str) Fully-qualified name of service
-//
-// Returns (int, str, str) (code, statusMessage, serviceUrl)
-//
-// service URL is provides address and port of the service. Fails if there is no provider.
+/// Handler for looking up all providers of a particular service.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+/// - `service` - Fully-qualified name of service (string)
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `serviceUrl` - URL that provides the address and port of the service. The function fails if there
+/// is no provider.
 struct LookupServiceHandler {
     data: Arc<RosData>,
 }
@@ -664,14 +735,21 @@ impl Handler for LookupServiceHandler {
     }
 }
 
-// deleteParam(caller_id, key)
-// Delete parameter
-//
-// Parameters
-// caller_id (str) ROS caller ID
-// key (str) Parameter name.
-//
-// Returns (int, str, int) (code, statusMessage, ignore)
+/// Handler for deleting a parameter.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+/// - `key` - Parameter name (string)
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `ignore` - an integer indicating the number of parameters deleted. This is always 0, since a delete
+/// operation deletes only one parameter.
 struct DeleteParamHandler {
     data: Arc<RosData>,
 }
@@ -687,21 +765,25 @@ impl Handler for DeleteParamHandler {
     }
 }
 
-// setParam(caller_id, key, value)
-//
-// Set parameter. NOTE: if value is a dictionary it will be treated as a parameter tree, where key
-// is the parameter namespace. For example {'x':1,'y':2,'sub':{'z':3}} will set key/x=1, key/y=2,
-// and key/sub/z=3. Furthermore, it will replace all existing parameters in the key parameter
-// namespace with the parameters in value. You must set parameters individually if you wish to
-// perform a union update.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID
-// key (str) Parameter name.
-// value (XMLRPCLegalValue) Parameter value.
-//
-// Returns (int, str, int) (code, statusMessage, ignore)
+/// Handler for setting a ROS parameter.
+///
+/// # Parameters
+///
+/// - caller_id - ROS caller ID (string)
+/// - key - Parameter name (string)
+/// - value - Parameter value. If it's a dictionary, it will be treated as a parameter tree, where
+/// the key is the parameter namespace. For example {'x':1,'y':2,'sub':{'z':3}} will set
+/// key/x=1, key/y=2, and key/sub/z=3. Furthermore, it will replace all existing parameters
+/// in the key parameter namespace with the parameters in value. You must set parameters individually
+/// if you wish to perform a union update (XMLRPCLegalValue)
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - code - response code (integer)
+/// - statusMessage - status message (string)
+/// - ignore - ignored (integer). Returns 0 in all cases.
 struct SetParamHandler {
     data: Arc<RosData>,
 }
@@ -756,20 +838,22 @@ impl Handler for SetParamHandler {
     }
 }
 
-// getParam(caller_id, key)
-//
-// Retrieve parameter value from server.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID
-// key (str) Parameter name. If key is a namespace, getParam() will return a parameter tree.
-//
-// Returns (int, str, XMLRPCLegalValue) (code, statusMessage, parameterValue)
-//
-// If code is not 1, parameterValue should be ignored. If key is a namespace, the return value will
-// be a dictionary, where each key is a parameter in that namespace. Sub-namespaces are also
-// represented as dictionaries.
+/// Handler for retrieving a parameter value from the server.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+/// - `key` - Parameter name. If `key` is a namespace, `getParam()` will return a parameter tree (string).
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `parameterValue` - the value of the requested parameter (of type `XMLRPCLegalValue`). If `code` is not 1,
+/// `parameterValue` should be ignored. If `key` is a namespace, the return value will be a dictionary, where each
+/// key is a parameter in that namespace. Sub-namespaces are also represented as dictionaries.
 struct GetParamHandler {
     data: Arc<RosData>,
 }
@@ -788,21 +872,22 @@ impl Handler for GetParamHandler {
     }
 }
 
-// subscribeParam(caller_id, caller_api, key)
-//
-// Retrieve parameter value from server and subscribe to updates to that param. See paramUpdate()
-// in the Node API.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID.
-// key (str) Parameter name
-// caller_api (str) Node API URI of subscriber for paramUpdate callbacks.
-//
-// Returns (int, str, XMLRPCLegalValue) (code, statusMessage, parameterValue)
-//
-// If code is not 1, parameterValue should be ignored. parameterValue is an empty dictionary if the
-// parameter has not been set yet.
+/// Handler for subscribing to a parameter value and updates.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+/// - `caller_api` - Node API URI of subscriber for paramUpdate callbacks (string)
+/// - `key` - Parameter name (string)
+///
+/// # Returns
+///
+/// A tuple of integers, a string representing the response, and the parameter value:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `parameterValue` - the parameter value (XML-RPC legal value). If the parameter has not been set yet,
+/// the value will be an empty dictionary.
 struct SubscribeParamHandler {
     data: Arc<RosData>,
 }
@@ -833,20 +918,22 @@ impl Handler for SubscribeParamHandler {
     }
 }
 
-// unsubscribeParam(caller_id, caller_api, key)
-//
-// Retrieve parameter value from server and subscribe to updates to that param. See paramUpdate()
-// in the Node API.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID.
-// key (str) Parameter name.
-// caller_api (str) Node API URI of subscriber.
-//
-// Returns (int, str, int) (code, statusMessage, numUnsubscribed)
-//
-// If numUnsubscribed is zero it means that the caller was not subscribed to the parameter.
+/// Handler for unsubscribing from a parameter and its updates.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+/// - `caller_api` - Node API URI of subscriber (string)
+/// - `key` - Parameter name to unsubscribe from (string)
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `numUnsubscribed` - number of unsubscriptions (either 0 or 1). If this is zero it means that the
+/// caller was not subscribed to the parameter. The call still succeeds as the intended final state is reached.
 struct UnSubscribeParamHandler {
     data: Arc<RosData>,
 }
@@ -858,34 +945,30 @@ impl Handler for UnSubscribeParamHandler {
         type Request = (String, String, String);
         let (caller_id, _caller_api, key) = Request::try_from_params(params)?;
 
-        let removed = self
-            .data
-            .parameter_subscriptions
-            .write()
-            .unwrap()
-            .entry(key.clone())
-            .or_default()
-            .remove(&caller_id)
-            .is_some();
-        self.data
-            .parameter_subscriptions
-            .write()
-            .unwrap()
-            .retain(|_, v| !v.is_empty());
+        let mut parameter_subscriptions = self.data.parameter_subscriptions.write().unwrap();
+        let subscribers = parameter_subscriptions.entry(key.clone()).or_default();
+        let removed = subscribers.remove(&caller_id).is_some();
+        if subscribers.is_empty() {
+            parameter_subscriptions.remove(&key);
+        }
         Ok((1, "", if removed { 1 } else { 0 }).try_to_value()?)
     }
 }
 
-// hasParam(caller_id, key)
-//
-// Check if parameter is stored on server.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID.
-// key (str) Parameter name.
-//
-// Returns (int, str, bool) (code, statusMessage, hasParam)
+/// Handler for checking if a parameter is stored on the server.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+/// - `key` - Parameter name (string)
+///
+/// # Returns
+///
+/// A tuple of integers and a boolean representing the response:
+///
+/// - `code` - Response code (integer)
+/// - `statusMessage` - Status message (string)
+/// - `hasParam` - Boolean indicating whether the parameter is stored on the server (true) or not (false).
 struct HasParamHandler {
     data: Arc<RosData>,
 }
@@ -901,15 +984,19 @@ impl Handler for HasParamHandler {
     }
 }
 
-// getParamNames(caller_id)
-//
-// Get list of all parameter names stored on this server.
-//
-// Parameters
-//
-// caller_id (str) ROS caller ID.
-//
-// Returns (int, str, [str]) (code, statusMessage, parameterNameList)
+/// Handler for getting a list of all parameter names stored on the server.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+///
+/// # Returns
+///
+/// A tuple of integers, a string, and a list of parameter names:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `parameterNameList` - list of all parameter names stored on the server (list of strings)
 struct GetParamNamesHandler {
     data: Arc<RosData>,
 }
@@ -932,6 +1019,20 @@ impl Handler for GetParamNamesHandler {
     }
 }
 
+/// Handler for debugging output. This handler logs the incoming request parameters as a debug
+/// message and always returns a success response with an empty status message.
+///
+/// # Parameters
+///
+/// - `data` - Shared reference to `RosData` struct (Arc<RosData>)
+///
+/// # Returns
+///
+/// A `HandlerResult` representing a tuple of integers and a string:
+///
+/// - `code` - response code (integer)
+/// - `ignore` ignored (string, always empty in this case)
+/// - `ignore` ignored (string, always empty in this case)
 struct DebugOutputHandler {
     data: Arc<RosData>,
 }
@@ -999,6 +1100,25 @@ impl Master {
         router
     }
 
+    /// Starts the ROS core server and listens for incoming requests.
+    ///
+    /// The server will listen on the URI specified during the construction of `RosCoreServer`.
+    /// The server router will handle requests to both `/` and `/RPC2`.
+    ///
+    /// # Returns
+    ///
+    /// An `anyhow::Result` indicating if the server started successfully or if there was an error.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ros_core_rs::core::Master;
+    /// use url::Url;
+    ///
+    /// let socket_address = ros_core_rs::url_to_socket_addr(&Url::parse("http://0.0.0.0:11311").unwrap());
+    /// let core = Master::new(&socket_address.unwrap());
+    /// core.serve();
+    /// ```
     pub async fn serve(&self) -> anyhow::Result<()> {
         // Some ROS implementation use /RPC2 like the python subscribers. Some ROS implementation
         // use / like Foxglove. We serve them all.
@@ -1016,61 +1136,74 @@ pub struct MasterClient {
 }
 
 macro_rules! implement_client_fn {
-    ($name:ident($($v:ident),*)-> $response_type:ident) => {
+    ($name:ident($($v:ident: $t:ty),*)->$response_type:ident) => {
         paste!{
-        pub async fn [<$name:snake>](&self, $($v: &str),*) -> anyhow::Result<$response_type>{
-
-        let request = Call::new(
-            MasterEndpoints::$name.as_str(),
-            ($($v,)*),
-        );
-        let response = self.client.call(request).await?;
-        let value = $response_type::try_from_value(&response)?;
-        Ok(value)
-        }
+            pub async fn [<$name:snake>](&self, $($v: $t),*) -> anyhow::Result<$response_type>{
+                let request = Call::new(
+                    MasterEndpoints::$name.as_str(),
+                    ($($v,)*),
+                );
+                let response = self.client.call(request).await?;
+                let value = $response_type::try_from_value(&response)?;
+                Ok(value)
+            }
         }
     };
 }
 
 macro_rules! make_client{
-    ($($name:tt($($v:ident),*)-> $response_type:ident),*) => {
-        $(implement_client_fn!($name($($v),*)-> $response_type);)*
+    ($($name:tt($($v:ident: $t:ty),*)-> $response_type:ident),*) => {
+        $(implement_client_fn!($name($($v: $t),*)-> $response_type);)*
 
     }
 
 }
 
 impl MasterClient {
-    pub fn new(uri: &str) -> Self {
-        let url = Url::parse(uri).expect("Failed to parse  URL.");
+    /// Constructs a new instance of `MasterClient` with the provided `Url`.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - A `Url` struct representing the ROS master URI to connect to.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ros_core_rs::core::MasterClient;
+    /// use url::Url;
+    ///
+    /// let uri = Url::parse("http://localhost:11311").unwrap();
+    /// let client = MasterClient::new(&uri);
+    /// ```
+    pub fn new(url: &Url) -> Self {
         let client = ClientBuilder::new(url.clone())
-            .user_agent("dxr-client-example")
+            .user_agent("master-client")
             .build();
         Self { client }
     }
 
     make_client!(
-        RegisterService(caller_id, service, service_api, caller_api)->RegisterServiceResponse,
-        UnRegisterService(caller_id, service, service_api)->UnRegisterServiceResponse,
-        RegisterSubscriber(caller_id, topic, topic_type, caller_api)->RegisterSubscriberResponse,
-        UnregisterSubscriber(caller_id, topic, caller_api)->UnRegisterSubscriberResponse,
-        RegisterPublisher(caller_id, topic, topic_type, caller_api)->RegisterPublisherResponse,
-        UnregisterPublisher(caller_id, topic, caller_api)->UnRegisterPublisherResponse,
-        LookupNode(caller_id, node_name)->LookupNodeResponse,
-        GetPublishedTopics(caller_id, subgraph)->GetPublishedTopicsResponse,
-        GetTopicTypes(caller_id)->GetTopicTypesResponse,
-        GetSystemState(caller_id)->GetSystemStateResponse,
-        GetUri(caller_id)->GetUriResponse,
-        LookupService(caller_id, service)->LookupServiceResponse,
-        DeleteParam(caller_id, key)->DeleteParamResponse,
-        // TODO(): correct args
-        SetParam(caller_id, key, value)->SetParamResponse,
-        GetParam(caller_id, key)->GetParamResponse,
-        SearchParam(caller_id, key)->GetParamResponse,
-        // TODO(): correct args
-        SubscribeParam(caller_id, caller_api, keys)->SubscribeParamResponse,
-        UnsubscribeParam(caller_id, caller_api, key)->UnSubscribeParamResponse,
-        HasParam(caller_id, key)->HasParamResponse,
-        GetParamNames(caller_id)->GetParamNamesResponse
+        RegisterService(caller_id: &str, service: &str, service_api: &str, caller_api: &str) -> RegisterServiceResponse,
+        UnRegisterService(caller_id: &str, service: &str, service_api:  &str) -> UnRegisterServiceResponse,
+        RegisterSubscriber(caller_id: &str, topic: &str, topic_type: &str, caller_api: &str) -> RegisterSubscriberResponse,
+        UnregisterSubscriber(caller_id: &str, topic: &str, caller_api: &str) -> UnRegisterSubscriberResponse,
+        RegisterPublisher(caller_id: &str, topic: &str, topic_type: &str, caller_api: &str) -> RegisterPublisherResponse,
+        UnregisterPublisher(caller_id: &str, topic: &str, caller_api: &str) -> UnRegisterPublisherResponse,
+        LookupNode(caller_id: &str, node_name: &str) -> LookupNodeResponse,
+        GetPublishedTopics(caller_id: &str, subgraph: &str) -> GetPublishedTopicsResponse,
+        GetTopicTypes(caller_id: &str) -> GetTopicTypesResponse,
+        GetSystemState(caller_id: &str) -> GetSystemStateResponse,
+        GetUri(caller_id: &str) -> GetUriResponse,
+        LookupService(caller_id: &str, service: &str) -> LookupServiceResponse,
+        DeleteParam(caller_id: &str, key: &str) -> DeleteParamResponse,
+        // TODO():  correct args
+        SetParam(caller_id: &str, key: &str, value: &Value) -> SetParamResponse,
+        GetParam(caller_id: &str, key: &str) -> GetParamResponse,
+        SearchParam(caller_id: &str, key: &str) -> GetParamResponse,
+        // TODO():  correct args
+        SubscribeParam(caller_id: &str, caller_api: &str, keys: &str) -> SubscribeParamResponse,
+        UnsubscribeParam(caller_id: &str, caller_api: &str, key: &str) -> UnSubscribeParamResponse,
+        HasParam(caller_id: &str, key: &str) -> HasParamResponse,
+        GetParamNames(caller_id: &str) -> GetParamNamesResponse
     );
 }

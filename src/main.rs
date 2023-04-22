@@ -6,7 +6,7 @@ async fn main() -> anyhow::Result<()> {
     let uri = match std::env::var("ROS_MASTER_URI") {
         Ok(v) => Url::parse(v.as_str())?,
         Err(std::env::VarError::NotPresent) => Url::parse("http://0.0.0.0:11311").unwrap(),
-        Err(v) => panic!(
+        Err(v) => anyhow::bail!(
             "Unkown error when parsing ROS_MASTER_URI: {}",
             v.to_string()
         ),
