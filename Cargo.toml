@@ -17,5 +17,10 @@ log = "0.4.17"
 env_logger = "0.10.0"
 chrono = "0.4.24"
 paste = "1.0.12"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"]}
 url = "2.3.1"
+[dev-dependencies]
+# tokio = { version = "1", features = sender["macros", "rt-multi-thread"]}
+rosrust = "0.9"
+rosrust_msg = "0.1"
+
