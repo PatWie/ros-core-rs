@@ -1034,6 +1034,7 @@ impl Handler for GetParamNamesHandler {
 /// - `ignore` ignored (string, always empty in this case)
 /// - `ignore` ignored (string, always empty in this case)
 struct DebugOutputHandler {
+    #[allow(dead_code)]
     data: Arc<RosData>,
 }
 #[async_trait]

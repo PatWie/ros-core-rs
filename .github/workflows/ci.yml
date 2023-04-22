@@ -1,0 +1,43 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        rust-version: ["1.66.1", "nightly"]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/
+            ~/target/
+          key: ${{ runner.os }}-rust-${{ matrix.rust-version }}
+          restore-keys: |
+            ${{ runner.os }}-rust-
+
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust-version }}
+
+      - name: Build and test with cargo
+        run: RUST_LOG=debug ROSRUST_MSG_PATH=`realpath examples/chatter/msgs` cargo test --features=doctest
+        continue-on-error: ${{ matrix.rust-version == 'nightly' }}
+
+      - name: Build example chatter
+        run: RUST_LOG=debug ROSRUST_MSG_PATH=`realpath examples/chatter/msgs` cargo build --example chatter --release
+        continue-on-error: ${{ matrix.rust-version == 'nightly' }}
