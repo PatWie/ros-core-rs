@@ -1,6 +1,8 @@
 # ROS-core implementation in Rust
 
-![Rust](https://img.shields.io/badge/Rust-1.55+-orange.svg) ![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Rust](https://img.shields.io/badge/Rust-1.55+-orange.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+[![Rust CI](https://github.com/PatWie/ros-core-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/PatWie/ros-core-rs/actions/workflows/ci.yml)
 
 This Rust library provides a standalone implementation of the ROS (Robot
 Operating System) core. It allows you to run a ROS master and communicate with
