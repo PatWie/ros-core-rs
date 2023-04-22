@@ -17,7 +17,7 @@ And run any of your ROS stack, eg., the [python chatter example](http://wiki.ros
 
 ### Talker/Listener
 
-This example creates a single binary which contains:
+This [example](./examples/chatter) creates a single binary which contains:
 - ROS core
 - ROS publisher
 - ROS subscriber

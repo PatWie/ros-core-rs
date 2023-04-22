@@ -8,7 +8,7 @@ use dxr::server::{async_trait, Handler, HandlerResult};
 use dxr::server_axum::axum;
 use dxr::server_axum::Server;
 use dxr::server_axum::{axum::http::HeaderMap, RouteBuilder};
-use dxr::{TryFromParams, TryToValue, Value};
+use dxr::{TryFromParams, TryFromValue, TryToValue, Value};
 
 use crate::client_api::ClientApi;
 
@@ -84,6 +84,7 @@ pub struct RosData {
     parameter_subscriptions: RwLock<ParameterSubscriptions>,
     uri: std::net::SocketAddr,
 }
+
 pub struct Master {
     data: Arc<RosData>,
 }
@@ -103,6 +104,7 @@ pub struct Master {
 struct RegisterServiceHandler {
     data: Arc<RosData>,
 }
+type RegisterServiceResponse = (i32, String, i32);
 #[async_trait]
 impl Handler for RegisterServiceHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -146,6 +148,7 @@ impl Handler for RegisterServiceHandler {
 struct UnRegisterServiceHandler {
     data: Arc<RosData>,
 }
+type UnRegisterServiceResponse = (i32, String, i32);
 #[async_trait]
 impl Handler for UnRegisterServiceHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -186,6 +189,7 @@ impl Handler for UnRegisterServiceHandler {
 struct RegisterSubscriberHandler {
     data: Arc<RosData>,
 }
+type RegisterSubscriberResponse = (i32, String, Vec<String>);
 #[async_trait]
 impl Handler for RegisterSubscriberHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -251,6 +255,7 @@ impl Handler for RegisterSubscriberHandler {
 struct UnRegisterSubscriberHandler {
     data: Arc<RosData>,
 }
+type UnRegisterSubscriberResponse = (i32, String, i32);
 #[async_trait]
 impl Handler for UnRegisterSubscriberHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -294,7 +299,7 @@ impl Handler for UnRegisterSubscriberHandler {
 struct RegisterPublisherHandler {
     data: Arc<RosData>,
 }
-
+type RegisterPublisherResponse = (i32, String, Vec<String>);
 #[async_trait]
 impl Handler for RegisterPublisherHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -384,7 +389,7 @@ impl Handler for RegisterPublisherHandler {
 struct UnRegisterPublisherHandler {
     data: Arc<RosData>,
 }
-
+type UnRegisterPublisherResponse = (i32, String, i32);
 #[async_trait]
 impl Handler for UnRegisterPublisherHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -434,6 +439,7 @@ impl Handler for UnRegisterPublisherHandler {
 struct LookupNodeHandler {
     data: Arc<RosData>,
 }
+type LookupNodeResponse = (i32, String, String);
 #[async_trait]
 impl Handler for LookupNodeHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -465,6 +471,7 @@ impl Handler for LookupNodeHandler {
 struct GetPublishedTopicsHandler {
     data: Arc<RosData>,
 }
+type GetPublishedTopicsResponse = (i32, String, Vec<(String, String)>);
 #[async_trait]
 impl Handler for GetPublishedTopicsHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -497,6 +504,7 @@ impl Handler for GetPublishedTopicsHandler {
 struct GetTopicTypesHandler {
     data: Arc<RosData>,
 }
+type GetTopicTypesResponse = (i32, String, Vec<(String, String)>);
 #[async_trait]
 impl Handler for GetTopicTypesHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -528,6 +536,7 @@ impl Handler for GetTopicTypesHandler {
 struct GetSystemStateHandler {
     data: Arc<RosData>,
 }
+type GetSystemStateResponse = (i32, String, Vec<(String, Vec<String>)>);
 #[async_trait]
 impl Handler for GetSystemStateHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -589,6 +598,7 @@ impl Handler for GetSystemStateHandler {
 struct GetUriHandler {
     data: Arc<RosData>,
 }
+type GetUriResponse = (i32, String, String);
 #[async_trait]
 impl Handler for GetUriHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -615,6 +625,7 @@ impl Handler for GetUriHandler {
 struct LookupServiceHandler {
     data: Arc<RosData>,
 }
+type LookupServiceResponse = (i32, String, String);
 #[async_trait]
 impl Handler for LookupServiceHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -664,6 +675,7 @@ impl Handler for LookupServiceHandler {
 struct DeleteParamHandler {
     data: Arc<RosData>,
 }
+type DeleteParamResponse = (i32, String, i32);
 #[async_trait]
 impl Handler for DeleteParamHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -693,6 +705,7 @@ impl Handler for DeleteParamHandler {
 struct SetParamHandler {
     data: Arc<RosData>,
 }
+type SetParamResponse = (i32, String, i32);
 #[async_trait]
 impl Handler for SetParamHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -760,6 +773,7 @@ impl Handler for SetParamHandler {
 struct GetParamHandler {
     data: Arc<RosData>,
 }
+type GetParamResponse = (i32, String, Value);
 #[async_trait]
 impl Handler for GetParamHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -792,6 +806,7 @@ impl Handler for GetParamHandler {
 struct SubscribeParamHandler {
     data: Arc<RosData>,
 }
+type SubscribeParamResponse = (i32, String, Value);
 #[async_trait]
 impl Handler for SubscribeParamHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -835,6 +850,7 @@ impl Handler for SubscribeParamHandler {
 struct UnSubscribeParamHandler {
     data: Arc<RosData>,
 }
+type UnSubscribeParamResponse = (i32, String, i32);
 #[async_trait]
 impl Handler for UnSubscribeParamHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -873,6 +889,7 @@ impl Handler for UnSubscribeParamHandler {
 struct HasParamHandler {
     data: Arc<RosData>,
 }
+type HasParamResponse = (i32, String, bool);
 #[async_trait]
 impl Handler for HasParamHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -896,6 +913,7 @@ impl Handler for HasParamHandler {
 struct GetParamNamesHandler {
     data: Arc<RosData>,
 }
+type GetParamNamesResponse = (i32, String, Vec<String>);
 #[async_trait]
 impl Handler for GetParamNamesHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
@@ -993,33 +1011,36 @@ impl Master {
     }
 }
 
-pub struct CoreClient {
+pub struct MasterClient {
     client: Client,
 }
 
 macro_rules! implement_client_fn {
-    ($name:ident($($v:ident),*)) => {
+    ($name:ident($($v:ident),*)-> $response_type:ident) => {
         paste!{
-        pub async fn [<$name:snake>](&self, $($v: &str),*) -> anyhow::Result<()>{
+        pub async fn [<$name:snake>](&self, $($v: &str),*) -> anyhow::Result<$response_type>{
 
         let request = Call::new(
             MasterEndpoints::$name.as_str(),
             ($($v,)*),
         );
-        self.client.call(request).await
+        let response = self.client.call(request).await?;
+        let value = $response_type::try_from_value(&response)?;
+        Ok(value)
         }
         }
     };
 }
 
 macro_rules! make_client{
-    ($($name:tt($($v:ident),*)),*) => {
-        $(implement_client_fn!($name($($v),*));)*
+    ($($name:tt($($v:ident),*)-> $response_type:ident),*) => {
+        $(implement_client_fn!($name($($v),*)-> $response_type);)*
 
     }
 
 }
-impl CoreClient {
+
+impl MasterClient {
     pub fn new(uri: &str) -> Self {
         let url = Url::parse(uri).expect("Failed to parse  URL.");
         let client = ClientBuilder::new(url.clone())
@@ -1029,27 +1050,27 @@ impl CoreClient {
     }
 
     make_client!(
-        RegisterService(caller_id, service, service_api, caller_api),
-        UnRegisterService(caller_id, service, service_api),
-        RegisterSubscriber(caller_id, topic, topic_type, caller_api),
-        UnregisterSubscriber(caller_id, topic, caller_api),
-        RegisterPublisher(caller_id, topic, topic_type, caller_api),
-        UnregisterPublisher(caller_id, topic, caller_api),
-        LookupNode(caller_id, node_name),
-        GetPublishedTopics(caller_id, subgraph),
-        GetTopicTypes(caller_id),
-        GetSystemState(caller_id),
-        GetUri(caller_id),
-        LookupService(caller_id, service),
-        DeleteParam(caller_id, key),
+        RegisterService(caller_id, service, service_api, caller_api)->RegisterServiceResponse,
+        UnRegisterService(caller_id, service, service_api)->UnRegisterServiceResponse,
+        RegisterSubscriber(caller_id, topic, topic_type, caller_api)->RegisterSubscriberResponse,
+        UnregisterSubscriber(caller_id, topic, caller_api)->UnRegisterSubscriberResponse,
+        RegisterPublisher(caller_id, topic, topic_type, caller_api)->RegisterPublisherResponse,
+        UnregisterPublisher(caller_id, topic, caller_api)->UnRegisterPublisherResponse,
+        LookupNode(caller_id, node_name)->LookupNodeResponse,
+        GetPublishedTopics(caller_id, subgraph)->GetPublishedTopicsResponse,
+        GetTopicTypes(caller_id)->GetTopicTypesResponse,
+        GetSystemState(caller_id)->GetSystemStateResponse,
+        GetUri(caller_id)->GetUriResponse,
+        LookupService(caller_id, service)->LookupServiceResponse,
+        DeleteParam(caller_id, key)->DeleteParamResponse,
         // TODO(): correct args
-        SetParam(caller_id, key, value),
-        GetParam(caller_id, key),
-        SearchParam(caller_id, key),
+        SetParam(caller_id, key, value)->SetParamResponse,
+        GetParam(caller_id, key)->GetParamResponse,
+        SearchParam(caller_id, key)->GetParamResponse,
         // TODO(): correct args
-        SubscribeParam(caller_id, caller_api, keys),
-        UnsubscribeParam(caller_id, caller_api, key),
-        HasParam(caller_id, key),
-        GetParamNames(caller_id)
+        SubscribeParam(caller_id, caller_api, keys)->SubscribeParamResponse,
+        UnsubscribeParam(caller_id, caller_api, key)->UnSubscribeParamResponse,
+        HasParam(caller_id, key)->HasParamResponse,
+        GetParamNames(caller_id)->GetParamNamesResponse
     );
 }

@@ -1,14 +1,16 @@
-use std::time::Duration;
+use ros_core_rs::core::MasterClient;
+use std::thread;
 use url::Url;
 
-use tokio::time::sleep;
+const ROS_MASTER_URI: &str = "http://0.0.0.0:11311";
+const TOPIC_NAME: &str = "/chatter";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     let t_core = tokio::spawn(async move {
-        let uri = Url::parse("http://0.0.0.0:11311").unwrap();
+        let uri = Url::parse(ROS_MASTER_URI).unwrap();
         let socket_address = ros_core_rs::url_to_socket_addr(&uri)?;
         let master = ros_core_rs::core::Master::new(&socket_address);
         master.serve().await
@@ -18,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
 
     let t_talker = tokio::spawn(async move {
         // Create publisher
-        let chatter_pub = rosrust::publish("chatter", 100).unwrap();
+        let chatter_pub = rosrust::publish(TOPIC_NAME, 100).unwrap();
 
         let mut count = 0;
 
@@ -41,21 +43,37 @@ async fn main() -> anyhow::Result<()> {
             count += 1;
         }
     });
-    // Give the publisher some time to publish.
-    // TODO(patwie): There must be a way to retry.
-    log::info!("Give publisher some time to come up");
-    sleep(Duration::from_secs(4)).await;
-    log::info!("Create subscriber");
+
+    // Wait for the publisher.
+    let master_client = MasterClient::new(ROS_MASTER_URI);
+    loop {
+        let (_, _, published_topics) = master_client.get_published_topics("", "").await.unwrap();
+        if published_topics
+            .iter()
+            .any(|(topic_name, _)| topic_name == TOPIC_NAME)
+        {
+            break;
+        }
+        thread::sleep(std::time::Duration::from_millis(1000));
+    }
 
     let t_listener = tokio::spawn(async move {
         // Create subscriber
         // The subscriber is stopped when the returned object is destroyed
-        let _subscriber_info =
-            rosrust::subscribe("chatter", 2, |v: rosrust_msg::std_msgs::String| {
-                // Callback for handling received messages
-                log::info!("I heard {}", v.data);
-            })
-            .unwrap();
+        let mut _subscriber_info;
+        loop {
+            _subscriber_info =
+                rosrust::subscribe(TOPIC_NAME, 2, |v: rosrust_msg::std_msgs::String| {
+                    // Callback for handling received messages
+                    log::info!("I heard {}", v.data);
+                });
+            if _subscriber_info.is_ok() {
+                break;
+            }
+            log::info!("publisher not found. Will retry until it becomes available...");
+            thread::sleep(std::time::Duration::from_millis(1000));
+        }
+        log::info!("We successfully subscribes to the publisher");
 
         // Block the thread until a shutdown signal is received
         rosrust::spin();
