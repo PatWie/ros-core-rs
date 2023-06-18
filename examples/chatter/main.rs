@@ -1,5 +1,6 @@
 use ros_core_rs::core::MasterClient;
 use std::thread;
+use tokio::select;
 use url::Url;
 
 const ROS_MASTER_URI: &str = "http://0.0.0.0:11311";
@@ -10,11 +11,23 @@ async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     // Spawn a Tokio task to run the ROS master
-    let t_core = tokio::spawn(async move {
-        let uri = Url::parse(ROS_MASTER_URI).unwrap();
-        let socket_address = ros_core_rs::url_to_socket_addr(&uri)?;
-        let master = ros_core_rs::core::Master::new(&socket_address);
-        master.serve().await
+    let core_cancel = tokio_util::sync::CancellationToken::new();
+    let t_core = tokio::spawn({
+        let core_cancel = core_cancel.clone();
+        async move {
+            let uri = Url::parse(ROS_MASTER_URI).unwrap();
+            let socket_address = ros_core_rs::url_to_socket_addr(&uri)?;
+            let master = ros_core_rs::core::Master::new(&socket_address);
+
+            select! {
+                serve = master.serve() => {
+                    serve
+                },
+                _ = core_cancel.cancelled() => {
+                    Ok(())
+                }
+            }
+        }
     });
 
     // Initialize the ROS node
@@ -84,6 +97,15 @@ async fn main() -> anyhow::Result<()> {
         rosrust::spin();
     });
 
-    let (_r1, _r2, _r3) = tokio::join!(t_core, t_talker, t_listener);
+    tokio::signal::ctrl_c().await?;
+
+    // Wind down clients
+    rosrust::shutdown();
+    let (_r1, _r2) = tokio::join!(t_talker, t_listener);
+
+    // Wind down core
+    core_cancel.cancel();
+    let _r3 = tokio::join!(t_core);
+
     Ok(())
 }
