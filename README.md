@@ -35,15 +35,13 @@ To run the talker/listener example, execute the following command:
 
 ```bash
 RUST_LOG=info ROSRUST_MSG_PATH=`realpath examples/chatter/msgs` cargo run --example chatter --release
-# Stop by Ctrl+C and Ctrl+Z
-kill -9 %1
 ```
 
 This example creates a single binary that includes a standalone implementation
 of the ROS core, as well as a ROS publisher and ROS subscriber. This
 implementation is inspired by the official chatter python example from the ROS
 wiki, which demonstrates a simple communication between two nodes using ROS
-messages. You can stop the program by using Ctrl+C and Ctrl+Z.
+messages.
 
 ### Debugging with official ROS docker image
 
