@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
     rosrust::loop_init("talker_listener", 1000);
 
     // Spawn a Tokio task to publish messages
-    let t_talker = tokio::spawn(async move {
+    let t_talker = tokio::task::spawn_blocking(move || {
         // Create publisher
         let chatter_pub = rosrust::publish(TOPIC_NAME, 100).unwrap();
 
@@ -62,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Spawn a Tokio task to subscribe to messages
-    let t_listener = tokio::spawn(async move {
+    let t_listener = tokio::task::spawn_blocking(move || {
         // Create subscriber
         // The subscriber is stopped when the returned object is destroyed
         let mut _subscriber_info;
