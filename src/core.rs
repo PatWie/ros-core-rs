@@ -155,6 +155,9 @@ impl Handler for RegisterServiceHandler {
         log::debug!("RegisterServiceHandler {:?} ", params);
         type Request = (String, String, String, String);
         let (caller_id, service, service_api, caller_api) = Request::try_from_params(params)?;
+
+        let service = resolve(&caller_id, &service);
+
         self.data
             .service_list
             .write()
@@ -202,6 +205,8 @@ impl Handler for UnRegisterServiceHandler {
         type Request = (String, String, String);
         let (caller_id, service, _service_api) = Request::try_from_params(params)?;
 
+        let service = resolve(&caller_id, &service);
+
         let mut service_list = self.data.service_list.write().unwrap();
 
         let removed = if let Some(providers) = service_list.get_mut(&service) {
@@ -245,6 +250,8 @@ impl Handler for RegisterSubscriberHandler {
         log::debug!("RegisterSubscriberHandler {:?} ", params);
         type Request = (String, String, String, String);
         let (caller_id, topic, topic_type, caller_api) = Request::try_from_params(params)?;
+
+        let topic = resolve(&caller_id, &topic);
 
         if let Some(known_topic_type) = self.data.topics.read().unwrap().get(&topic.clone()) {
             if known_topic_type != &topic_type {
@@ -315,6 +322,8 @@ impl Handler for UnRegisterSubscriberHandler {
         type Request = (String, String, String);
         let (caller_id, topic, _caller_api) = Request::try_from_params(params)?;
 
+        let topic = resolve(&caller_id, &topic);
+
         let removed = self
             .data
             .subscriptions
@@ -360,6 +369,8 @@ impl Handler for RegisterPublisherHandler {
         log::debug!("RegisterPublisherHandler {:?} ", params);
         type Request = (String, String, String, String);
         let (caller_id, topic, topic_type, caller_api) = Request::try_from_params(params)?;
+
+        let topic = resolve(&caller_id, &topic);
 
         if let Some(v) = self.data.topics.read().unwrap().get(&topic.clone()) {
             if v != &topic_type {
@@ -462,6 +473,9 @@ impl Handler for UnRegisterPublisherHandler {
         log::debug!("UnRegisterPublisherHandler {:?} ", params);
         type Request = (String, String, String);
         let (caller_id, topic, caller_api) = Request::try_from_params(params)?;
+
+        let topic = resolve(&caller_id, &topic);
+
         log::debug!("Called {caller_id} with {topic} {caller_api}");
 
         if self
@@ -752,7 +766,9 @@ impl Handler for LookupServiceHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
         log::debug!("LookupServiceHandler {:?} ", params);
         type Request = (String, String);
-        let (_caller_id, service) = Request::try_from_params(params)?;
+        let (caller_id, service) = Request::try_from_params(params)?;
+
+        let service = resolve(&caller_id, &service);
 
         let services = self
             .data
@@ -809,7 +825,8 @@ impl Handler for DeleteParamHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
         log::debug!("DeleteParamHandler {:?} ", params);
         type Request = (String, String);
-        let (_caller_id, key) = Request::try_from_params(params)?;
+        let (caller_id, key) = Request::try_from_params(params)?;
+        let key = resolve(&caller_id, &key);
         let key = key.strip_prefix("/").unwrap_or(&key).split("/");
         self.data.parameters.write().unwrap().remove(key);
         return Ok((1, "", 0).try_to_value()?);
@@ -864,6 +881,7 @@ impl Handler for SetParamHandler {
         log::debug!("SetParamHandler {:?} ", params);
         type Request = (String, String, Value);
         let (caller_id, key, value) = Request::try_from_params(params)?;
+        let key = resolve(&caller_id, &key);
         
         let mut update_futures = JoinSet::new();
 
@@ -981,7 +999,8 @@ impl Handler for GetParamHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
         log::debug!("GetParamHandler {:?} ", params);
         type Request = (String, String);
-        let (_caller_id, key) = Request::try_from_params(params)?;
+        let (caller_id, key) = Request::try_from_params(params)?;
+        let key = resolve(&caller_id, &key);
         let params = self.data.parameters.read().unwrap();
         let key = key.strip_prefix("/").unwrap_or(&key).split("/");
 
@@ -1021,6 +1040,7 @@ impl Handler for SubscribeParamHandler {
         log::debug!("SubscribeParamHandler {:?} ", params);
         type Request = (String, String, String);
         let (caller_id, caller_api, key) = Request::try_from_params(params)?;
+        let key = resolve(&caller_id, &key);
         
         let mut new_subscription = Some(ParamSubscription {
             node_id: caller_id.clone(),
@@ -1084,6 +1104,7 @@ impl Handler for UnSubscribeParamHandler {
         log::debug!("UnSubscribeParamHandler {:?} ", params);
         type Request = (String, String, String);
         let (caller_id, _caller_api, key) = Request::try_from_params(params)?;
+        let key = resolve(&caller_id, &key);
 
         let mut parameter_subscriptions = self.data.parameter_subscriptions.write().unwrap();
         let mut removed = false;
@@ -1096,6 +1117,20 @@ impl Handler for UnSubscribeParamHandler {
             }
         });
         Ok((1, "", if removed { 1 } else { 0 }).try_to_value()?)
+    }
+}
+
+fn resolve(caller_id : &str, key : &str) -> String {
+    match key.chars().next() {
+        None => "".to_owned(),
+        Some('/') => key.to_owned(),
+        Some('~') => format!("{}/{}", caller_id, &key[1..]),
+        Some(_) => {
+            match caller_id.rsplit_once("/") {
+                Some((namespace, _node_name)) => format!("{}/{}", namespace, key),
+                None => key.to_owned()
+            }
+        }
     }
 }
 
@@ -1123,8 +1158,8 @@ impl Handler for HasParamHandler {
         log::debug!("HasParamHandler {:?} ", params);
         
         type Request = (String, String);
-        let (_caller_id, key) = Request::try_from_params(params)?;
-
+        let (caller_id, key) = Request::try_from_params(params)?;
+        let key = resolve(&caller_id, &key);
         let has = self.data.parameters.read().unwrap().get_keys().contains(&key);
         Ok((1, "", has).try_to_value()?)
     }
