@@ -21,6 +21,8 @@ pub mod core;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use url::Url;
 
+mod param_tree;
+
 pub fn url_to_socket_addr(url: &Url) -> anyhow::Result<SocketAddr> {
     let ip_addr = match url.host() {
         Some(url::Host::Domain(domain)) if domain == "localhost" => IpAddr::V4(Ipv4Addr::LOCALHOST),

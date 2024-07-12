@@ -1,4 +1,4 @@
-use dxr::client::{Call, Client, ClientBuilder, Url};
+use dxr_client::{Call, Client, ClientBuilder, Url};
 use dxr::Value;
 
 pub struct ClientApi {
@@ -42,8 +42,8 @@ impl ClientApi {
         publisher_apis: &Vec<String>,
     ) -> anyhow::Result<()> {
         let request = Call::new("publisherUpdate", (caller_id, topic, publisher_apis));
-        let result = self.client.call(request).await;
-        result
+        let result = self.client.call::<_, ()>(request).await;
+        Ok(result?)
     }
 
     /// Sends a "paramUpdate" request to the ROS node.
@@ -65,6 +65,6 @@ impl ClientApi {
     ) -> anyhow::Result<()> {
         let request = Call::new("paramUpdate", (caller_id, key, value));
         let result = self.client.call(request).await;
-        result
+        Ok(result?)
     }
 }

@@ -1,13 +1,17 @@
 extern crate dxr;
-use dxr::client::{Call, Client, ClientBuilder, Url};
+use dxr_client::{Call, Client, ClientBuilder, Url};
+use futures::stream::FuturesOrdered;
+use maplit::hashmap;
 use paste::paste;
+use tokio::task::JoinSet;
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
+use futures::StreamExt;
 use std::sync::{Arc, RwLock};
 
-use dxr::server::{async_trait, Handler, HandlerResult};
-use dxr::server_axum::axum;
-use dxr::server_axum::Server;
-use dxr::server_axum::{axum::http::HeaderMap, RouteBuilder};
+use dxr_server::{async_trait, Handler, HandlerResult};
+use dxr_server::{axum::{self, http::HeaderMap}, Server, RouteBuilder};
+
 use dxr::{TryFromParams, TryFromValue, TryToValue, Value};
 
 use crate::client_api::ClientApi;
@@ -17,8 +21,7 @@ pub type Nodes = HashMap<String, String>;
 pub type Topics = HashMap<String, String>;
 pub type Subscriptions = HashMap<String, HashSet<String>>;
 pub type Publishers = HashMap<String, HashSet<String>>;
-pub type Parameters = HashMap<String, Value>;
-pub type ParameterSubscriptions = HashMap<String, HashMap<String, String>>;
+pub type Parameters = crate::param_tree::ParamValue;
 
 /// An enum that represents the different types of endpoints that can be accessed in the ROS Master API.
 ///
@@ -68,6 +71,7 @@ enum MasterEndpoints {
     HasParam,
     GetParamNames,
     SystemMultiCall,
+    GetPid,
     Default,
 }
 
@@ -95,9 +99,17 @@ impl MasterEndpoints {
             MasterEndpoints::HasParam => "hasParam",
             MasterEndpoints::GetParamNames => "getParamNames",
             MasterEndpoints::SystemMultiCall => "system.multicall",
+            MasterEndpoints::GetPid => "getPid",
             MasterEndpoints::Default => "",
         }
     }
+}
+
+#[derive(Debug)]
+struct ParamSubscription {
+    node_id : String,
+    param : String,
+    api_uri : String
 }
 
 /// Struct containing information about ROS data.
@@ -109,7 +121,7 @@ pub struct RosData {
     subscriptions: RwLock<Subscriptions>, // stores information about topic subscriptions
     publications: RwLock<Publishers>, // stores information about topic publishers
     parameters: RwLock<Parameters>, // stores information about ROS parameters
-    parameter_subscriptions: RwLock<ParameterSubscriptions>, // stores information about parameter subscriptions
+    parameter_subscriptions: RwLock<Vec<ParamSubscription>>, // stores information about parameter subscriptions
     uri: std::net::SocketAddr,                               // the address of the ROS network
 }
 
@@ -399,7 +411,16 @@ impl Handler for RegisterPublisherHandler {
             .unwrap_or_default();
 
         // Inform all subscribers of the new publisher.
-        let publisher_apis = publishers.into_iter().collect::<Vec<String>>();
+        let publisher_nodes = publishers.into_iter().collect::<Vec<String>>();
+        let publisher_apis = self
+            .data
+            .nodes
+            .read() // Note: This should not be a race condition, because for every publisher, the node has to be there first, and we're reading "nodes" after "publishers".
+            .unwrap()
+            .iter()
+            .filter(|node| publisher_nodes.contains(node.0))
+            .map(|node| node.1.clone())
+            .collect::<Vec<String>>();
         for client_api_url in subscribers_api_urls.clone() {
             let client_api = ClientApi::new(client_api_url.as_str());
             log::debug!("Call {}", client_api_url);
@@ -441,7 +462,7 @@ impl Handler for UnRegisterPublisherHandler {
         log::debug!("UnRegisterPublisherHandler {:?} ", params);
         type Request = (String, String, String);
         let (caller_id, topic, caller_api) = Request::try_from_params(params)?;
-        println!("Called {caller_id} with {topic} {caller_api}");
+        log::debug!("Called {caller_id} with {topic} {caller_api}");
 
         if self
             .data
@@ -678,6 +699,35 @@ impl Handler for GetUriHandler {
     }
 }
 
+/// Handler for getting the PID of the master.
+///
+/// # Parameters
+///
+/// - `caller_id` - ROS caller ID (string)
+///
+/// # Returns
+///
+/// A tuple of integers and a string representing the response:
+///
+/// - `code` - response code (integer)
+/// - `statusMessage` - status message (string)
+/// - `pid` - PID of the ROS master (integer)
+struct GetPidHandler {
+    #[allow(unused)]
+    data: Arc<RosData>,
+}
+type GetPidResponse = (i32, String, i32);
+#[async_trait]
+impl Handler for GetPidHandler {
+    async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
+        log::debug!("GetPidHandler {:?} ", params);
+        type Request = String;
+        let _caller_id = Request::try_from_params(params)?;
+        let result = std::process::id() as i32; // max pid on linux is 2^22, so the typecast should have no unintended side effects
+        return Ok((1, "", (result,)).try_to_value()?);
+    }
+}
+
 /// Handler for looking up all providers of a particular service.
 ///
 /// # Parameters
@@ -760,9 +810,29 @@ impl Handler for DeleteParamHandler {
         log::debug!("DeleteParamHandler {:?} ", params);
         type Request = (String, String);
         let (_caller_id, key) = Request::try_from_params(params)?;
-        self.data.parameters.write().unwrap().remove(&key);
+        let key = key.strip_prefix("/").unwrap_or(&key).split("/");
+        self.data.parameters.write().unwrap().remove(key);
         return Ok((1, "", 0).try_to_value()?);
     }
+}
+
+fn one_is_prefix_of_the_other(a : &str, b: &str) -> bool {
+    let len = a.len().min(b.len());
+    a[..len] == b[..len]
+}
+
+async fn update_client_with_new_param_value(
+    client_api_url : String,
+    updating_node_id : String,
+    subscribing_node_id : String,
+    param_name : String,
+    new_value : Value
+) -> Result<(), anyhow::Error>
+    {
+    let client_api = ClientApi::new(&client_api_url);
+    let request = client_api
+        .param_update(&updating_node_id, &param_name, &new_value);
+    request.await
 }
 
 /// Handler for setting a ROS parameter.
@@ -794,45 +864,93 @@ impl Handler for SetParamHandler {
         log::debug!("SetParamHandler {:?} ", params);
         type Request = (String, String, Value);
         let (caller_id, key, value) = Request::try_from_params(params)?;
-        self.data
-            .parameters
-            .write()
-            .unwrap()
-            .insert(key.clone(), value.clone());
+        
+        let mut update_futures = JoinSet::new();
 
-        // TODO(patwie): handle case where value is not a single value.
-        let all_key_values;
-        all_key_values = vec![(key.clone(), value.clone())];
+        {
+            let key = key.clone();
+            let mut params = self.data.parameters.write().unwrap();
+            let key_split = key.strip_prefix("/").unwrap_or(&key).split("/");
+            params.update_inner(key_split, value);
 
-        for (cur_key, cur_value) in all_key_values {
-            // Update the parameter value
-            self.data
-                .parameters
-                .write()
-                .unwrap()
-                .insert(cur_key.clone(), cur_value.clone());
-            // Notify any parameter subscribers about this new value
-            let subscribers = self
-                .data
-                .parameter_subscriptions
-                .read()
-                .unwrap()
-                .get(&cur_key)
-                .cloned();
-
-            if let Some(subscribers) = subscribers {
-                for client_api_url in subscribers.values() {
-                    let client_api = ClientApi::new(client_api_url.as_str());
-                    log::debug!("Call {}", client_api_url);
-                    let r = client_api
-                        .param_update(&caller_id.as_str(), &cur_key.as_str(), &cur_value)
-                        .await;
-                    if let Err(r) = r {
-                        log::warn!("paramUpdate call to {} failed: {}", client_api_url, r);
-                    }
+            let param_subscriptions = self.data.parameter_subscriptions.read().unwrap();
+            log::info!("updating param {}", &key);
+            for subscription in param_subscriptions.iter() {
+                log::debug!("subscriber {:?} has subscription? {}", &subscription, one_is_prefix_of_the_other(&key, &subscription.param));
+                if one_is_prefix_of_the_other(&key, &subscription.param) {
+                    let subscribed_key_spit = subscription.param.strip_prefix("/").unwrap_or(&subscription.param).split("/");
+                    let new_value = params.get(subscribed_key_spit).unwrap();
+                    update_futures.spawn(
+                        update_client_with_new_param_value(
+                            subscription.api_uri.clone(),
+                            caller_id.clone(),
+                            subscription.node_id.clone(),
+                            subscription.param.clone(),
+                            new_value
+                        )
+                    );
                 }
             }
         }
+
+        while let Some(res) = update_futures.join_next().await {
+            match res {
+                Ok(Ok(())) => {
+                    log::debug!("a subscriber has been updated");
+                },
+                Ok(Err(err)) => {
+                    log::warn!("Error updating a subscriber of changed param {}:\n{:#?}", &key, err);
+                },
+                Err(err) => {
+                    log::warn!("Error updating a subscriber of changed param {}:\n{:#?}", &key, err);
+                },
+            }
+        }
+
+        log::info!("done updating subscribers");
+
+        // TODO: send update notifications
+            
+        // }
+        // self.data
+        //     .parameters
+        //     .write()
+        //     .unwrap()
+        //     .insert(key.clone(), value.clone());
+
+        // TODO(patwie): handle case where value is not a single value.
+        // let all_key_values;
+        // all_key_values = vec![(key.clone(), value.clone())];
+
+        // for (cur_key, cur_value) in all_key_values {
+        //     // Update the parameter value
+        //     // self.data
+        //     //     .parameters
+        //     //     .write()
+        //     //     .unwrap()
+        //     //     .insert(cur_key.clone(), cur_value.clone());
+        //     // Notify any parameter subscribers about this new value
+        //     let subscribers = self
+        //         .data
+        //         .parameter_subscriptions
+        //         .read()
+        //         .unwrap()
+        //         .get(&cur_key)
+        //         .cloned();
+
+        //     if let Some(subscribers) = subscribers {
+        //         for client_api_url in subscribers.values() {
+        //             let client_api = ClientApi::new(client_api_url.as_str());
+        //             log::debug!("Call {}", client_api_url);
+        //             let r = client_api
+        //                 .param_update(&caller_id.as_str(), &cur_key.as_str(), &cur_value)
+        //                 .await;
+        //             if let Err(r) = r {
+        //                 log::warn!("paramUpdate call to {} failed: {}", client_api_url, r);
+        //             }
+        //         }
+        //     }
+        // }
 
         Ok((1, "", 0).try_to_value()?)
     }
@@ -864,9 +982,14 @@ impl Handler for GetParamHandler {
         log::debug!("GetParamHandler {:?} ", params);
         type Request = (String, String);
         let (_caller_id, key) = Request::try_from_params(params)?;
-        Ok(match self.data.parameters.read().unwrap().get(&key) {
+        let params = self.data.parameters.read().unwrap();
+        let key = key.strip_prefix("/").unwrap_or(&key).split("/");
+
+        Ok(match params.get(key) {
             Some(value) => (1, "", value.to_owned()),
-            None => (0, "", Value::string("")),
+            None => {
+                (0, "", Value::string("".to_owned()))
+            },
         }
         .try_to_value()?)
     }
@@ -898,22 +1021,39 @@ impl Handler for SubscribeParamHandler {
         log::debug!("SubscribeParamHandler {:?} ", params);
         type Request = (String, String, String);
         let (caller_id, caller_api, key) = Request::try_from_params(params)?;
-        let param_subscriptions = &mut self.data.parameter_subscriptions.write().unwrap();
-        if !param_subscriptions.contains_key(&key) {
-            param_subscriptions.insert(key.clone(), HashMap::new());
-        }
-        let subscriptions = param_subscriptions.get_mut(&key).unwrap();
+        
+        let mut new_subscription = Some(ParamSubscription {
+            node_id: caller_id.clone(),
+            param: key.clone(),
+            api_uri: caller_api
+        });
+        
+        { // RwLock scope
+            let param_subscriptions = &mut self.data.parameter_subscriptions.write().unwrap();
+            
+            // replace old entry if subscribing node has restarted
+            for subscription in param_subscriptions.iter_mut() {
+                if &subscription.node_id == &caller_id && &subscription.param == &key {
+                    let _ = std::mem::replace(subscription, new_subscription.take().unwrap());
+                    break;
+                }
+            }
 
-        subscriptions.insert(caller_id.clone(), caller_api.clone());
+            // add a new entry if it's a new node id
+            if let Some(new_subscription) = new_subscription {
+                param_subscriptions.push(new_subscription)
+            }
+        }
+
+        let key_split = key.strip_prefix("/").unwrap_or(&key).split("/");
 
         let value = self
             .data
             .parameters
             .read()
             .unwrap()
-            .get(&key)
-            .cloned()
-            .unwrap_or(Value::string(""));
+            .get(key_split)
+            .unwrap_or(Value::string("".to_owned()));
         Ok((1, "", value).try_to_value()?)
     }
 }
@@ -946,11 +1086,15 @@ impl Handler for UnSubscribeParamHandler {
         let (caller_id, _caller_api, key) = Request::try_from_params(params)?;
 
         let mut parameter_subscriptions = self.data.parameter_subscriptions.write().unwrap();
-        let subscribers = parameter_subscriptions.entry(key.clone()).or_default();
-        let removed = subscribers.remove(&caller_id).is_some();
-        if subscribers.is_empty() {
-            parameter_subscriptions.remove(&key);
-        }
+        let mut removed = false;
+        parameter_subscriptions.retain(|subscription| {
+            if subscription.node_id == caller_id && subscription.param == key {
+                removed = true;
+                false
+            } else {
+                true
+            }
+        });
         Ok((1, "", if removed { 1 } else { 0 }).try_to_value()?)
     }
 }
@@ -977,9 +1121,11 @@ type HasParamResponse = (i32, String, bool);
 impl Handler for HasParamHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
         log::debug!("HasParamHandler {:?} ", params);
+        
         type Request = (String, String);
         let (_caller_id, key) = Request::try_from_params(params)?;
-        let has = self.data.parameters.read().unwrap().contains_key(&key);
+
+        let has = self.data.parameters.read().unwrap().get_keys().contains(&key);
         Ok((1, "", has).try_to_value()?)
     }
 }
@@ -1005,16 +1151,19 @@ type GetParamNamesResponse = (i32, String, Vec<String>);
 impl Handler for GetParamNamesHandler {
     async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
         log::debug!("GetParamNamesHandler {:?} ", params);
-        type Request = (String, String);
-        let _caller_id = Request::try_from_params(params)?;
+        let a = <(String, String)>::try_from_params(params);
+        let b = <(String,)>::try_from_params(params);
+        
+        if a.is_err() && b.is_err() {
+            a?;
+        }
+
         let keys: Vec<String> = self
             .data
             .parameters
             .read()
             .unwrap()
-            .keys()
-            .cloned()
-            .collect();
+            .get_keys();
         Ok((1, "", keys).try_to_value()?)
     }
 }
@@ -1065,8 +1214,8 @@ impl Master {
                 topics: RwLock::new(Topics::new()),
                 subscriptions: RwLock::new(Subscriptions::new()),
                 publications: RwLock::new(Publishers::new()),
-                parameters: RwLock::new(Parameters::new()),
-                parameter_subscriptions: RwLock::new(ParameterSubscriptions::new()),
+                parameters: RwLock::new(Parameters::HashMap(hashmap! {})),
+                parameter_subscriptions: RwLock::new(Vec::new()),
                 uri: url.to_owned(),
             }),
         }
@@ -1096,6 +1245,7 @@ impl Master {
             MasterEndpoints::HasParam => HasParamHandler,
             MasterEndpoints::GetParamNames => GetParamNamesHandler,
             MasterEndpoints::SystemMultiCall => DebugOutputHandler,
+            MasterEndpoints::GetPid => GetPidHandler,
             MasterEndpoints::Default => DebugOutputHandler
         );
         router
@@ -1127,8 +1277,8 @@ impl Master {
             .nest("/", self.create_router())
             .nest("/RPC2", self.create_router());
         log::info!("roscore-rs is listening on {}", self.data.uri);
-        let server = Server::from_route(self.data.uri, router);
-        server.serve().await
+        let server = Server::from_route(router);
+        Ok(server.serve(self.data.uri.try_into()?).await?)
     }
 }
 
@@ -1195,6 +1345,7 @@ impl MasterClient {
         GetTopicTypes(caller_id: &str) -> GetTopicTypesResponse,
         GetSystemState(caller_id: &str) -> GetSystemStateResponse,
         GetUri(caller_id: &str) -> GetUriResponse,
+        GetPid(caller_id: &str) -> GetPidResponse,
         LookupService(caller_id: &str, service: &str) -> LookupServiceResponse,
         DeleteParam(caller_id: &str, key: &str) -> DeleteParamResponse,
         // TODO():  correct args

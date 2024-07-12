@@ -12,7 +12,9 @@ keywords = ["ros", "rosrust", "roscore", "robotics"]
 categories = ["science::robotics"]
 
 [dependencies]
-dxr = { version = "0.5.3", features = ["server", "server-axum"] }
+dxr = { path = "../dxr/dxr" }
+dxr_server = { path = "../dxr/dxr_server", features = ["axum", "multicall"] }
+dxr_client = { path = "../dxr/dxr_client", features = ["reqwest"] }
 anyhow = "1.0.69"
 log = "0.4.17"
 env_logger = "0.10.0"
@@ -20,6 +22,8 @@ chrono = "0.4.24"
 paste = "1.0.12"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"]}
 url = "2.3.1"
+maplit = "1.0.2"
+futures = "0.3.30"
 
 [dev-dependencies]
 rosrust = "0.9"

@@ -71,3 +71,12 @@ necessary to use this script to use the standalone implementation on its own.
 We welcome contributions to this project! If you find a bug or have a feature
 request, please create an issue on the GitHub repository. If you want to
 contribute code, feel free to submit a pull request.
+
+
+## Cross-compilation to arm64
+```bash
+apt install libssl-dev:arm64
+export AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_LIB_DIR=/usr/lib/aarch64-linux-gnu/
+export AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_INCLUDE_DIR=/usr/include/aarch64-linux-gnu/
+cargo build --target aarch64-unknown-linux-gnu --release
+```
