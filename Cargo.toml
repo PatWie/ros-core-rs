@@ -14,7 +14,7 @@ categories = ["science::robotics"]
 [dependencies]
 dxr = { path = "../dxr/dxr" }
 dxr_server = { path = "../dxr/dxr_server", features = ["axum", "multicall"] }
-dxr_client = { path = "../dxr/dxr_client", features = ["reqwest"] }
+dxr_client = { path = "../dxr/dxr_client", default-features = false, features = ["reqwest", "rustls-tls"] }
 anyhow = "1.0.69"
 log = "0.4.17"
 env_logger = "0.10.0"
