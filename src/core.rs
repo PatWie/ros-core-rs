@@ -1016,6 +1016,49 @@ impl Handler for GetParamHandler {
     }
 }
 
+struct SearchParamHandler {
+    data: Arc<RosData>,
+}
+type SearchParamResponse = (i32, String, Value);
+#[async_trait]
+impl Handler for SearchParamHandler {
+    async fn handle(&self, params: &[Value], _headers: HeaderMap) -> HandlerResult {
+        log::debug!("GetParamHandler {:?} ", params);
+        type Request = (String, String);
+        let (caller_id, key) = Request::try_from_params(params)?;
+
+        let mut param_name = String::with_capacity(caller_id.len() + key.len());
+        
+        let params = self.data.parameters.read().unwrap().get_keys();
+        let key = key.strip_prefix("/").unwrap_or(&key);
+        let key_first_element = key.split("/").next().unwrap_or("");
+        let namespace = caller_id.strip_prefix("/").unwrap_or(&caller_id).split("/").collect::<Vec<&str>>();
+
+        let range = (0usize..namespace.len()).rev();
+        
+        for up_to in range {
+            param_name.clear();
+            param_name.push('/');
+            for idx in 0..up_to {
+                param_name.push_str(namespace[idx]);
+                param_name.push('/');
+            }
+            param_name.push_str(key_first_element);
+            if params.contains(&param_name) {
+                break;
+            }
+        }
+
+        for path in key.split("/").skip(1) {
+            param_name.push('/');
+            param_name.push_str(path);
+        }
+
+        Ok((1, "", param_name)
+        .try_to_value()?)
+    }
+}
+
 /// Handler for subscribing to a parameter value and updates.
 ///
 /// # Parameters
@@ -1311,7 +1354,7 @@ impl Master {
             MasterEndpoints::DeleteParam => DeleteParamHandler,
             MasterEndpoints::SetParam => SetParamHandler,
             MasterEndpoints::GetParam => GetParamHandler,
-            MasterEndpoints::SearchParam => GetParamHandler,
+            MasterEndpoints::SearchParam => SearchParamHandler,
             MasterEndpoints::SubscribeParam => SubscribeParamHandler,
             MasterEndpoints::UnsubscribeParam => UnSubscribeParamHandler,
             MasterEndpoints::HasParam => HasParamHandler,
@@ -1423,7 +1466,7 @@ impl MasterClient {
         // TODO():  correct args
         SetParam(caller_id: &str, key: &str, value: &Value) -> SetParamResponse,
         GetParam(caller_id: &str, key: &str) -> GetParamResponse,
-        SearchParam(caller_id: &str, key: &str) -> GetParamResponse,
+        SearchParam(caller_id: &str, key: &str) -> SearchParamResponse,
         // TODO():  correct args
         SubscribeParam(caller_id: &str, caller_api: &str, keys: &str) -> SubscribeParamResponse,
         UnsubscribeParam(caller_id: &str, caller_api: &str, key: &str) -> UnSubscribeParamResponse,
