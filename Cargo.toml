@@ -24,6 +24,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"]}
 url = "2.3.1"
 maplit = "1.0.2"
 futures = "0.3.30"
+uuid = { version = "1.10.0", features = ["v1", "rng"] }
 
 [dev-dependencies]
 rosrust = "0.9"

@@ -4,6 +4,7 @@ use futures::stream::FuturesOrdered;
 use maplit::hashmap;
 use paste::paste;
 use tokio::task::JoinSet;
+use uuid::{Context, NoContext};
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use futures::StreamExt;
@@ -15,6 +16,7 @@ use dxr_server::{axum::{self, http::HeaderMap}, Server, RouteBuilder};
 use dxr::{TryFromParams, TryFromValue, TryToValue, Value};
 
 use crate::client_api::ClientApi;
+use crate::param_tree::ParamValue;
 
 pub type Services = HashMap<String, HashMap<String, String>>;
 pub type Nodes = HashMap<String, String>;
@@ -1240,8 +1242,41 @@ macro_rules! make_handlers {
     }};
 }
 
+fn get_node_id() -> Option<[u8; 6]> {
+    let ip_link = std::process::Command::new("ip").arg("link").output().ok()?.stdout;
+    let ip_link = String::from_utf8_lossy(&ip_link);
+    let mut next_is_mac = false;
+    let mut mac = None;
+    for element in ip_link.split_whitespace() {
+        if next_is_mac {
+            mac = Some(element);
+            break;
+        }
+        if element == "link/ether" {
+            next_is_mac = true;
+        }
+    };
+    let mac = mac?;
+    let mut all_ok = true;
+    let mac : Vec<u8> = mac
+        .split(':')
+        .filter_map(|hex| {
+            let res = u8::from_str_radix(hex, 16);
+            all_ok &= res.is_ok();
+            res.ok()
+        })
+        .collect();
+    if !all_ok {
+        return None
+    }
+    let mac : [u8; 6] = mac.try_into().ok()?;
+    Some(mac)
+}
+
 impl Master {
     pub fn new(url: &std::net::SocketAddr) -> Master {
+        
+        let run_id = ParamValue::Value(Value::string(uuid::Uuid::new_v1(uuid::Timestamp::now(Context::new_random()), &get_node_id().unwrap_or_default()).to_string()));
         Master {
             data: Arc::new(RosData {
                 service_list: RwLock::new(Services::new()),
@@ -1249,7 +1284,9 @@ impl Master {
                 topics: RwLock::new(Topics::new()),
                 subscriptions: RwLock::new(Subscriptions::new()),
                 publications: RwLock::new(Publishers::new()),
-                parameters: RwLock::new(Parameters::HashMap(hashmap! {})),
+                parameters: RwLock::new(Parameters::HashMap(hashmap! {
+                    "run_id".to_owned() => run_id
+                })),
                 parameter_subscriptions: RwLock::new(Vec::new()),
                 uri: url.to_owned(),
             }),
