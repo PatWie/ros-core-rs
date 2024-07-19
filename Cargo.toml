@@ -12,9 +12,12 @@ keywords = ["ros", "rosrust", "roscore", "robotics"]
 categories = ["science::robotics"]
 
 [dependencies]
-dxr = { path = "../dxr/dxr" }
-dxr_server = { path = "../dxr/dxr_server", features = ["axum", "multicall"] }
-dxr_client = { path = "../dxr/dxr_client", default-features = false, features = ["reqwest", "rustls-tls"] }
+dxr = { version = "0.6.3" }
+dxr_server = { version = "0.6.3", features = ["axum", "multicall"] }
+dxr_client = { version = "0.6.3", default-features = false, features = [
+    "reqwest",
+    "rustls-tls" # Use rustls instead of openssl for easier cross-compilation
+] }
 anyhow = "1.0.69"
 log = "0.4.17"
 env_logger = "0.10.0"

@@ -1,9 +1,9 @@
-use std::{any::Any, collections::HashMap, iter::Peekable, mem};
+use std::{collections::HashMap, mem};
 
-use dxr::{TryFromParams, TryFromValue, TryToValue, Value};
+use dxr::{TryFromValue, TryToValue, Value};
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum ParamValue {
+pub enum ParamValue {
     HashMap(HashMap<String, ParamValue>),
     Array(Vec<ParamValue>),
     Value(Value),
@@ -11,14 +11,14 @@ pub(crate) enum ParamValue {
 
 impl From<&Value> for ParamValue {
     fn from(value: &Value) -> Self {
-        if let (Ok(hm)) = HashMap::<String, Value>::try_from_value(value) {
+        if let Ok(hm) = HashMap::<String, Value>::try_from_value(value) {
             let mut rv = HashMap::with_capacity(hm.len());
             for (k, v) in hm.into_iter() {
                 rv.insert(k, ParamValue::from(&v));
             }
             return Self::HashMap(rv);
         }
-        if let (Ok(vec)) = Vec::<Value>::try_from_value(value) {
+        if let Ok(vec) = Vec::<Value>::try_from_value(value) {
             let mut rv = Vec::with_capacity(vec.len());
             for e in vec.into_iter() {
                 rv.push(ParamValue::from(&e))

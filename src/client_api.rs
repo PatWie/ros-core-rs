@@ -1,5 +1,5 @@
-use dxr_client::{Call, Client, ClientBuilder, Url};
 use dxr::Value;
+use dxr_client::{Call, Client, ClientBuilder, Url};
 
 pub struct ClientApi {
     client: Client,
