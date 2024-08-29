@@ -846,15 +846,16 @@ async fn update_client_with_new_param_value(
     subscribing_node_id: String,
     param_name: String,
     new_value: Value,
-) -> Result<(), anyhow::Error> {
+) -> Result<Value, anyhow::Error> {
     let client_api = ClientApi::new(&client_api_url);
     let request = client_api.param_update(&updating_node_id, &param_name, &new_value);
     let res = request.await;
     match res {
-        Ok(()) => log::debug!(
-            "Sent new value for param '{}' to node '{}'.",
+        Ok(ref v) => log::debug!(
+            "Sent new value for param '{}' to node '{}'. response: {:?}",
             param_name,
-            subscribing_node_id
+            subscribing_node_id,
+            &res
         ),
         Err(ref e) => log::debug!(
             "Error sending new value for param '{}' to node '{}': {:?}",
@@ -864,7 +865,7 @@ async fn update_client_with_new_param_value(
         ),
     }
 
-    res
+    Ok(res?)
 }
 
 /// Handler for setting a ROS parameter.
@@ -934,8 +935,8 @@ impl Handler for SetParamHandler {
 
         while let Some(res) = update_futures.join_next().await {
             match res {
-                Ok(Ok(())) => {
-                    log::debug!("a subscriber has been updated");
+                Ok(Ok(v)) => {
+                    log::debug!("a subscriber has been updated (res: {:#?})", &v);
                 }
                 Ok(Err(err)) => {
                     log::warn!(

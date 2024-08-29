@@ -62,7 +62,7 @@ impl ClientApi {
         caller_id: &str,
         key: &str,
         value: &Value,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Value> {
         let request = Call::new("paramUpdate", (caller_id, key, value));
         let result = self.client.call(request).await;
         Ok(result?)
