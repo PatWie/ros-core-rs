@@ -986,13 +986,13 @@ impl Handler for GetParamHandler {
         log::debug!("GetParamHandler {:?} ", params);
         type Request = (String, String);
         let (caller_id, key) = Request::try_from_params(params)?;
-        let key = resolve(&caller_id, &key);
+        let key_full = resolve(&caller_id, &key);
         let params = self.data.parameters.read().unwrap();
-        let key = key.strip_prefix('/').unwrap_or(&key).split('/');
+        let key_path = key_full.strip_prefix('/').unwrap_or(&key_full).split('/');
 
-        Ok(match params.get(key) {
-            Some(value) => (1, "", value.to_owned()),
-            None => (0, "", Value::string("".to_owned())),
+        Ok(match params.get(key_path) {
+            Some(value) => (1, "".to_owned(), value.to_owned()),
+            None => (-1, format!("Parameter [{key_full}] is not set"), Value::i4(0)),
         }
         .try_to_value()?)
     }
