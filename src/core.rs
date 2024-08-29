@@ -256,12 +256,8 @@ impl Handler for RegisterSubscriberHandler {
         let topic = resolve(&caller_id, &topic);
 
         if let Some(known_topic_type) = self.data.topics.read().unwrap().get(&topic.clone()) {
-            if known_topic_type != &topic_type {
-                let err_msg = format!(
-                    "{} for topic {} does not match {}",
-                    topic_type, topic, known_topic_type
-                );
-                return Ok((0, err_msg, "").try_to_value()?);
+            if known_topic_type != &topic_type && topic_type != "*" {
+                log::warn!("Topic '{topic}' was initially published as '{known_topic_type}', but subscriber '{caller_id}' wants it as '{topic_type}'.");
             }
         }
 
@@ -376,8 +372,7 @@ impl Handler for RegisterPublisherHandler {
 
         if let Some(v) = self.data.topics.read().unwrap().get(&topic.clone()) {
             if v != &topic_type {
-                let err_msg = format!("{} for topic {} does not match {}", topic_type, topic, v);
-                return Ok((0, err_msg, Vec::<String>::default()).try_to_value()?);
+                log::warn!("New publisher for topic '{topic}' has type '{topic_type}', but it is already published as '{v}'.");
             }
         }
 
@@ -855,7 +850,7 @@ async fn update_client_with_new_param_value(
             "Sent new value for param '{}' to node '{}'. response: {:?}",
             param_name,
             subscribing_node_id,
-            &res
+            &v
         ),
         Err(ref e) => log::debug!(
             "Error sending new value for param '{}' to node '{}': {:?}",
