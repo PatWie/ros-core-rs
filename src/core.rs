@@ -256,12 +256,8 @@ impl Handler for RegisterSubscriberHandler {
         let topic = resolve(&caller_id, &topic);
 
         if let Some(known_topic_type) = self.data.topics.read().unwrap().get(&topic.clone()) {
-            if known_topic_type != &topic_type {
-                let err_msg = format!(
-                    "{} for topic {} does not match {}",
-                    topic_type, topic, known_topic_type
-                );
-                return Ok((0, err_msg, "").try_to_value()?);
+            if known_topic_type != &topic_type && topic_type != "*" {
+                log::warn!("Topic '{topic}' was initially published as '{known_topic_type}', but subscriber '{caller_id}' wants it as '{topic_type}'.");
             }
         }
 
@@ -376,8 +372,7 @@ impl Handler for RegisterPublisherHandler {
 
         if let Some(v) = self.data.topics.read().unwrap().get(&topic.clone()) {
             if v != &topic_type {
-                let err_msg = format!("{} for topic {} does not match {}", topic_type, topic, v);
-                return Ok((0, err_msg, Vec::<String>::default()).try_to_value()?);
+                log::warn!("New publisher for topic '{topic}' has type '{topic_type}', but it is already published as '{v}'.");
             }
         }
 
@@ -846,15 +841,16 @@ async fn update_client_with_new_param_value(
     subscribing_node_id: String,
     param_name: String,
     new_value: Value,
-) -> Result<(), anyhow::Error> {
+) -> Result<Value, anyhow::Error> {
     let client_api = ClientApi::new(&client_api_url);
     let request = client_api.param_update(&updating_node_id, &param_name, &new_value);
     let res = request.await;
     match res {
-        Ok(()) => log::debug!(
-            "Sent new value for param '{}' to node '{}'.",
+        Ok(ref v) => log::debug!(
+            "Sent new value for param '{}' to node '{}'. response: {:?}",
             param_name,
-            subscribing_node_id
+            subscribing_node_id,
+            &v
         ),
         Err(ref e) => log::debug!(
             "Error sending new value for param '{}' to node '{}': {:?}",
@@ -864,7 +860,7 @@ async fn update_client_with_new_param_value(
         ),
     }
 
-    res
+    Ok(res?)
 }
 
 /// Handler for setting a ROS parameter.
@@ -934,8 +930,8 @@ impl Handler for SetParamHandler {
 
         while let Some(res) = update_futures.join_next().await {
             match res {
-                Ok(Ok(())) => {
-                    log::debug!("a subscriber has been updated");
+                Ok(Ok(v)) => {
+                    log::debug!("a subscriber has been updated (res: {:#?})", &v);
                 }
                 Ok(Err(err)) => {
                     log::warn!(
@@ -986,13 +982,13 @@ impl Handler for GetParamHandler {
         log::debug!("GetParamHandler {:?} ", params);
         type Request = (String, String);
         let (caller_id, key) = Request::try_from_params(params)?;
-        let key = resolve(&caller_id, &key);
+        let key_full = resolve(&caller_id, &key);
         let params = self.data.parameters.read().unwrap();
-        let key = key.strip_prefix('/').unwrap_or(&key).split('/');
+        let key_path = key_full.strip_prefix('/').unwrap_or(&key_full).split('/');
 
-        Ok(match params.get(key) {
-            Some(value) => (1, "", value.to_owned()),
-            None => (0, "", Value::string("".to_owned())),
+        Ok(match params.get(key_path) {
+            Some(value) => (1, "".to_owned(), value.to_owned()),
+            None => (-1, format!("Parameter [{key_full}] is not set"), Value::i4(0)),
         }
         .try_to_value()?)
     }
