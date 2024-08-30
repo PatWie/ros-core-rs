@@ -40,9 +40,9 @@ impl ClientApi {
         caller_id: &str,
         topic: &str,
         publisher_apis: &Vec<String>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Value> {
         let request = Call::new("publisherUpdate", (caller_id, topic, publisher_apis));
-        let result = self.client.call::<_, ()>(request).await;
+        let result = self.client.call::<_, _>(request).await;
         Ok(result?)
     }
 
@@ -64,6 +64,27 @@ impl ClientApi {
         value: &Value,
     ) -> anyhow::Result<Value> {
         let request = Call::new("paramUpdate", (caller_id, key, value));
+        let result = self.client.call(request).await;
+        Ok(result?)
+    }
+
+    /// Requests the node to shut down
+    ///
+    /// # Arguments
+    ///
+    /// * `caller_id` - A string slice representing the ID of the caller.
+    /// * `reason` - Reason for shutting the node down. Will likely show up in logs.
+    ///
+    /// # Returns
+    ///
+    /// An `anyhow::Result` indicating whether the request was successful.
+
+    pub async fn shutdown(
+        &self,
+        caller_id: &str,
+        reason: &str,
+    ) -> anyhow::Result<()> {
+        let request = Call::new("shutdown", (caller_id, reason));
         let result = self.client.call(request).await;
         Ok(result?)
     }
