@@ -38,8 +38,3 @@ tokio-util = "0.7.8"
 
 [features]
 doctest = []
-
-[patch.crates-io]
-dxr = { path = "../dxr/dxr" }
-dxr_server = { path = "../dxr/dxr_server"}
-dxr_client = { path = "../dxr/dxr_client"}
