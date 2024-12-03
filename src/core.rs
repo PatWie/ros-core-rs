@@ -1012,7 +1012,7 @@ impl Handler for GetParamHandler {
 
         Ok(match params.get(key_path) {
             Some(value) => (1, format!("Parameter [{}]", &key_full), value.to_owned()),
-            None => (-1, format!("Parameter [{key_full}] is not set"), Value::i4(0)),
+            None => (-1, format!("Parameter [{}] is not set", &key_full), Value::i4(0)),
         }
         .try_to_value()?)
     }
