@@ -1,5 +1,5 @@
 use dxr::Value;
-use dxr_client::{Call, Client, ClientBuilder, Url};
+use dxr_client::{Client, ClientBuilder, Url};
 
 pub struct ClientApi {
     client: Client,
@@ -41,8 +41,8 @@ impl ClientApi {
         topic: &str,
         publisher_apis: &Vec<String>,
     ) -> anyhow::Result<Value> {
-        let request = Call::new("publisherUpdate", (caller_id, topic, publisher_apis));
-        let result = self.client.call::<_, _>(request).await;
+        let result = self.client.call::<_, _>("publisherUpdate", (caller_id, topic, publisher_apis)).await;
+        
         Ok(result?)
     }
 
@@ -63,8 +63,7 @@ impl ClientApi {
         key: &str,
         value: &Value,
     ) -> anyhow::Result<Value> {
-        let request = Call::new("paramUpdate", (caller_id, key, value));
-        let result = self.client.call(request).await;
+        let result = self.client.call("paramUpdate", (caller_id, key, value)).await;
         Ok(result?)
     }
 
@@ -84,8 +83,7 @@ impl ClientApi {
         caller_id: &str,
         reason: &str,
     ) -> anyhow::Result<()> {
-        let request = Call::new("shutdown", (caller_id, reason));
-        let result = self.client.call(request).await;
+        let result = self.client.call("shutdown", (caller_id, reason)).await;
         Ok(result?)
     }
 }

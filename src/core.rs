@@ -1,5 +1,5 @@
 extern crate dxr;
-use dxr_client::{Call, Client, ClientBuilder, Url};
+use dxr_client::{Client, ClientBuilder, Url};
 use maplit::hashmap;
 use paste::paste;
 use std::collections::hash_map::Entry;
@@ -1011,8 +1011,8 @@ impl Handler for GetParamHandler {
         let key_path = key_full.strip_prefix('/').unwrap_or(&key_full).split('/');
 
         Ok(match params.get(key_path) {
-            Some(value) => (1, "".to_owned(), value.to_owned()),
-            None => (-1, format!("Parameter [{key_full}] is not set"), Value::i4(0)),
+            Some(value) => (1, format!("Parameter [{}]", &key_full), value.to_owned()),
+            None => (-1, format!("Parameter [{}] is not set", &key_full), Value::i4(0)),
         }
         .try_to_value()?)
     }
@@ -1423,11 +1423,11 @@ macro_rules! implement_client_fn {
     ($name:ident($($v:ident: $t:ty),*)->$response_type:ident) => {
         paste!{
             pub async fn [<$name:snake>](&self, $($v: $t),*) -> anyhow::Result<$response_type>{
-                let request = Call::new(
+                let request = (
                     MasterEndpoints::$name.as_str(),
                     ($($v,)*),
                 );
-                let response = self.client.call(request).await?;
+                let response = self.client.call(request.0, request.1).await?;
                 let value = $response_type::try_from_value(&response)?;
                 Ok(value)
             }
