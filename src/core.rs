@@ -14,7 +14,7 @@ use dxr_server::{
     RouteBuilder, Server,
 };
 
-use dxr::{Struct, TryFromParams, TryFromValue, TryToValue, Value};
+use dxr::{TryFromParams, TryFromValue, TryToValue, Value};
 
 use crate::client_api::ClientApi;
 use crate::param_tree::ParamValue;
@@ -175,19 +175,19 @@ impl Handler for RegisterServiceHandler {
     }
 }
 
-async fn register_node(nodes : &RwLock<Nodes>, caller_id: &str, caller_api : &str) -> () {
+async fn register_node(nodes: &RwLock<Nodes>, caller_id: &str, caller_api: &str) -> () {
     let shutdown_api_url;
     {
         let mut nodes = nodes.write().unwrap();
         match nodes.entry(caller_id.to_owned()) {
             Entry::Vacant(v) => {
                 v.insert(caller_api.to_owned());
-                return
-            },
+                return;
+            }
             Entry::Occupied(mut e) => {
                 let e = e.get_mut();
                 if e == caller_api {
-                    return
+                    return;
                 } else {
                     shutdown_api_url = std::mem::replace(e, caller_api.to_owned());
                 }
@@ -200,9 +200,14 @@ async fn register_node(nodes : &RwLock<Nodes>, caller_id: &str, caller_api : &st
     }
 }
 
-async fn shutdown_node(client_api_url: &str, node_id : &str) -> anyhow::Result<()> {
+async fn shutdown_node(client_api_url: &str, node_id: &str) -> anyhow::Result<()> {
     let client_api = ClientApi::new(client_api_url);
-    let res = client_api.shutdown("/master", &format!("[{}] Reason: new node registered with same name", node_id)).await;
+    let res = client_api
+        .shutdown(
+            "/master",
+            &format!("[{}] Reason: new node registered with same name", node_id),
+        )
+        .await;
     res
 }
 
@@ -296,7 +301,7 @@ impl Handler for RegisterSubscriberHandler {
             .entry(topic.clone())
             .or_default()
             .insert(caller_id.clone());
-        
+
         register_node(&self.data.nodes, &caller_id, &caller_api).await;
 
         let publishers = self
@@ -459,9 +464,12 @@ impl Handler for RegisterPublisherHandler {
                 .await;
             match r {
                 Err(e) => log::warn!("publisherUpdate call to {} failed: {}", client_api_url, e),
-                Ok(v) => log::debug!("publisherUpdate call to {} succeeded, returning: {:?}", client_api_url, v)
+                Ok(v) => log::debug!(
+                    "publisherUpdate call to {} succeeded, returning: {:?}",
+                    client_api_url,
+                    v
+                ),
             }
-            
         }
 
         return Ok((1, "", subscribers_api_urls).try_to_value()?);
@@ -849,7 +857,7 @@ impl Handler for DeleteParamHandler {
         let (caller_id, key) = Request::try_from_params(params)?;
         let key = resolve(&caller_id, &key);
         let key_split = key.strip_prefix('/').unwrap_or(&key).split('/');
-        
+
         let mut update_futures = JoinSet::new();
 
         {
@@ -869,7 +877,9 @@ impl Handler for DeleteParamHandler {
                         .strip_prefix('/')
                         .unwrap_or(&subscription.param)
                         .split('/');
-                    let new_value = params.get(subscribed_key_spit).unwrap_or_else(|| Value::structure(Struct::empty()));
+                    let new_value = params
+                        .get(subscribed_key_spit)
+                        .unwrap_or_else(|| crate::empty_struct());
                     update_futures.spawn(update_client_with_new_param_value(
                         subscription.api_uri.clone(),
                         caller_id.clone(),
@@ -1065,7 +1075,11 @@ impl Handler for GetParamHandler {
 
         Ok(match params.get(key_path) {
             Some(value) => (1, format!("Parameter [{}]", &key_full), value.to_owned()),
-            None => (-1, format!("Parameter [{}] is not set", &key_full), Value::i4(0)),
+            None => (
+                -1,
+                format!("Parameter [{}] is not set", &key_full),
+                Value::i4(0),
+            ),
         }
         .try_to_value()?)
     }
@@ -1181,9 +1195,7 @@ impl Handler for SubscribeParamHandler {
             .read()
             .unwrap()
             .get(key_split)
-            .unwrap_or_else(|| {
-                Value::structure(Struct::empty())
-            });
+            .unwrap_or_else(|| crate::empty_struct());
 
         Ok((1, &format!("Subscribed to parameter [{}]", &key), value).try_to_value()?)
     }
