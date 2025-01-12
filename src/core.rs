@@ -14,7 +14,7 @@ use dxr_server::{
     RouteBuilder, Server,
 };
 
-use dxr::{TryFromParams, TryFromValue, TryToValue, Value};
+use dxr::{Struct, TryFromParams, TryFromValue, TryToValue, Value};
 
 use crate::client_api::ClientApi;
 use crate::param_tree::ParamValue;
@@ -848,8 +848,61 @@ impl Handler for DeleteParamHandler {
         type Request = (String, String);
         let (caller_id, key) = Request::try_from_params(params)?;
         let key = resolve(&caller_id, &key);
-        let key = key.strip_prefix('/').unwrap_or(&key).split('/');
-        self.data.parameters.write().unwrap().remove(key);
+        let key_split = key.strip_prefix('/').unwrap_or(&key).split('/');
+        
+        let mut update_futures = JoinSet::new();
+
+        {
+            let mut params = self.data.parameters.write().unwrap();
+            params.remove(key_split);
+            let param_subscriptions = self.data.parameter_subscriptions.read().unwrap();
+            log::info!("updating subscribers of deleted param {}", &key);
+            for subscription in param_subscriptions.iter() {
+                log::debug!(
+                    "subscriber {:?} has subscription? {}",
+                    &subscription,
+                    one_is_prefix_of_the_other(&key, &subscription.param)
+                );
+                if one_is_prefix_of_the_other(&key, &subscription.param) {
+                    let subscribed_key_spit = subscription
+                        .param
+                        .strip_prefix('/')
+                        .unwrap_or(&subscription.param)
+                        .split('/');
+                    let new_value = params.get(subscribed_key_spit).unwrap_or_else(|| Value::structure(Struct::empty()));
+                    update_futures.spawn(update_client_with_new_param_value(
+                        subscription.api_uri.clone(),
+                        caller_id.clone(),
+                        subscription.node_id.clone(),
+                        subscription.param.clone(),
+                        new_value,
+                    ));
+                }
+            }
+        }
+
+        while let Some(res) = update_futures.join_next().await {
+            match res {
+                Ok(Ok(v)) => {
+                    log::debug!("a subscriber has been updated (res: {:#?})", &v);
+                }
+                Ok(Err(err)) => {
+                    log::warn!(
+                        "Error updating a subscriber of changed param {}:\n{:#?}",
+                        &key,
+                        err
+                    );
+                }
+                Err(err) => {
+                    log::warn!(
+                        "Error updating a subscriber of changed param {}:\n{:#?}",
+                        &key,
+                        err
+                    );
+                }
+            }
+        }
+
         return Ok((1, "", 0).try_to_value()?);
     }
 }
@@ -1128,8 +1181,11 @@ impl Handler for SubscribeParamHandler {
             .read()
             .unwrap()
             .get(key_split)
-            .unwrap_or(Value::string("".to_owned()));
-        Ok((1, "", value).try_to_value()?)
+            .unwrap_or_else(|| {
+                Value::structure(Struct::empty())
+            });
+
+        Ok((1, &format!("Subscribed to parameter [{}]", &key), value).try_to_value()?)
     }
 }
 
