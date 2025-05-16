@@ -6,35 +6,35 @@ name = "ros-core-rs"
 readme = "README.md"
 repository = "https://github.com/patwie/ros-core-rs"
 homepage = "https://github.com/patwie/ros-core-rs"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 keywords = ["ros", "rosrust", "roscore", "robotics"]
 categories = ["science::robotics"]
 
 [dependencies]
-dxr = { version = "0.7.0" }
-dxr_server = { version = "0.7.0", features = ["axum", "multicall"] }
-dxr_client = { version = "0.7.0", default-features = false, features = [
+dxr = { version = "0.7.1" }
+dxr_server = { version = "0.7.1", features = ["axum", "multicall"] }
+dxr_client = { version = "0.7.1", default-features = false, features = [
     "reqwest",
     "rustls-tls" # Use rustls instead of openssl for easier cross-compilation
 ] }
-anyhow = "1.0.69"
-log = "0.4.17"
-env_logger = "0.10.0"
-chrono = "0.4.24"
-paste = "1.0.12"
+anyhow = "1.0.98"
+log = "0.4.27"
+env_logger = "0.10.2"
+chrono = "0.4.41"
+paste = "1.0.15"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"]}
-url = "2.3.1"
+url = "2.5.4"
 maplit = "1.0.2"
-futures = "0.3.30"
-uuid = { version = "1.10.0", features = ["v1", "rng"] }
+futures = "0.3.31"
+uuid = { version = "1.16.0", features = ["v1", "rng"] }
 
 [dev-dependencies]
 rosrust = "0.9"
 rosrust_msg = "0.1"
 doc-comment = "0.3.3"
 tokio = { version = "1", features = ["signal"]}
-tokio-util = "0.7.8"
+tokio-util = "0.7.15"
 
 [features]
 doctest = []
