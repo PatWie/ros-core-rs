@@ -57,7 +57,7 @@ impl ParamValue {
     }
 
     pub(crate) fn contains(&self, key: String) -> bool {
-        let key = key.split('/').collect::<Vec<_>>();
+        let key = key.split('/');
         self.get(key).is_some()
     }
 
@@ -175,4 +175,8 @@ fn test_param_tree() {
     tree.update_inner(["robot_configs"].iter(), Value::i4(23));
     let res = tree.get(["robot_configs"]).unwrap();
     assert_eq!(res, Value::i4(23));
+
+    assert!(tree.contains("/".to_owned()));
+    assert!(tree.contains("/arms".to_owned()));
+    assert!(tree.contains("/arms/arm_left".to_owned()));
 }
