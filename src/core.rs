@@ -1281,13 +1281,7 @@ impl Handler for HasParamHandler {
         type Request = (String, String);
         let (caller_id, key) = Request::try_from_params(params)?;
         let key = resolve(&caller_id, &key);
-        let has = self
-            .data
-            .parameters
-            .read()
-            .unwrap()
-            .get_keys()
-            .contains(&key);
+        let has = self.data.parameters.read().unwrap().contains(key);
         Ok((1, "", has).try_to_value()?)
     }
 }

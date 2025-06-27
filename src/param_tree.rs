@@ -55,6 +55,12 @@ impl ParamValue {
             _ => Vec::new(),
         }
     }
+
+    pub(crate) fn contains(&self, key: String) -> bool {
+        let key = key.split('/').collect::<Vec<_>>();
+        self.get(key).is_some()
+    }
+
     pub(crate) fn get<I, T>(&self, key: I) -> Option<Value>
     where
         I: IntoIterator<Item = T>,
