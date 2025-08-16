@@ -811,7 +811,7 @@ impl Handler for LookupServiceHandler {
             if services.is_empty() {
                 return Ok((
                     0,
-                    "`no providers for service \"{service}\"`".to_string(),
+                    format!("`no providers for service \"{service}\"`"),
                     "",
                 )
                     .try_to_value()?);
@@ -823,7 +823,7 @@ impl Handler for LookupServiceHandler {
 
         return Ok((
             0,
-            "`no providers for service \"{service}\"`".to_string(),
+            format!("`no providers for service \"{service}\"`"),
             "",
         )
             .try_to_value()?);
