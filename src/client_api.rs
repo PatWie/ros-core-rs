@@ -41,8 +41,11 @@ impl ClientApi {
         topic: &str,
         publisher_apis: &Vec<String>,
     ) -> anyhow::Result<Value> {
-        let result = self.client.call::<_, _>("publisherUpdate", (caller_id, topic, publisher_apis)).await;
-        
+        let result = self
+            .client
+            .call::<_, _>("publisherUpdate", (caller_id, topic, publisher_apis))
+            .await;
+
         Ok(result?)
     }
 
@@ -63,7 +66,10 @@ impl ClientApi {
         key: &str,
         value: &Value,
     ) -> anyhow::Result<Value> {
-        let result = self.client.call("paramUpdate", (caller_id, key, value)).await;
+        let result = self
+            .client
+            .call("paramUpdate", (caller_id, key, value))
+            .await;
         Ok(result?)
     }
 
@@ -78,11 +84,7 @@ impl ClientApi {
     ///
     /// An `anyhow::Result` indicating whether the request was successful.
 
-    pub async fn shutdown(
-        &self,
-        caller_id: &str,
-        reason: &str,
-    ) -> anyhow::Result<()> {
+    pub async fn shutdown(&self, caller_id: &str, reason: &str) -> anyhow::Result<()> {
         let result = self.client.call("shutdown", (caller_id, reason)).await;
         Ok(result?)
     }

@@ -18,9 +18,9 @@
 //!
 pub mod client_api;
 pub mod core;
+use dxr::{TryToValue, Value};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use url::Url;
-use dxr::{TryToValue, Value};
 
 mod param_tree;
 
@@ -37,5 +37,7 @@ pub fn url_to_socket_addr(url: &Url) -> anyhow::Result<SocketAddr> {
 }
 
 fn empty_struct() -> Value {
-    std::collections::HashMap::<String, i32>::new().try_to_value().unwrap()
+    std::collections::HashMap::<String, i32>::new()
+        .try_to_value()
+        .unwrap()
 }

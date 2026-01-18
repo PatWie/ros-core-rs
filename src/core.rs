@@ -809,24 +809,16 @@ impl Handler for LookupServiceHandler {
         if services.is_some() {
             let services = services.unwrap();
             if services.is_empty() {
-                return Ok((
-                    0,
-                    format!("`no providers for service \"{service}\"`"),
-                    "",
-                )
-                    .try_to_value()?);
+                return Ok(
+                    (0, format!("`no providers for service \"{service}\"`"), "").try_to_value()?
+                );
             } else {
                 let service_url = services.values().next().unwrap();
                 return Ok((1, "".to_string(), service_url.clone()).try_to_value()?);
             }
         }
 
-        return Ok((
-            0,
-            format!("`no providers for service \"{service}\"`"),
-            "",
-        )
-            .try_to_value()?);
+        return Ok((0, format!("`no providers for service \"{service}\"`"), "").try_to_value()?);
     }
 }
 
@@ -1078,7 +1070,7 @@ impl Handler for GetParamHandler {
             None => (
                 -1,
                 format!("Parameter [{}] is not set", &key_full),
-                Value::i4(0),
+                Value::Integer(0),
             ),
         }
         .try_to_value()?)
@@ -1393,7 +1385,7 @@ fn get_node_id() -> Option<[u8; 6]> {
 
 impl Master {
     pub fn new(url: &std::net::SocketAddr) -> Master {
-        let run_id = ParamValue::Value(Value::string(
+        let run_id = ParamValue::Value(Value::String(
             uuid::Uuid::new_v1(
                 uuid::Timestamp::now(Context::new_random()),
                 &get_node_id().unwrap_or_default(),
@@ -1469,7 +1461,7 @@ impl Master {
         // Some ROS implementation use /RPC2 like the python subscribers. Some ROS implementation
         // use / like Foxglove. We serve them all.
         let router: axum::Router = axum::Router::new()
-            .nest("/", self.create_router())
+            .merge(self.create_router())
             .nest("/RPC2", self.create_router());
         log::info!("roscore-rs is listening on {}", self.data.uri);
         let server = Server::from_route(router);

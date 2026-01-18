@@ -30,7 +30,7 @@ impl From<&Value> for ParamValue {
 }
 
 impl TryToValue for ParamValue {
-    fn try_to_value(&self) -> Result<Value, dxr::DxrError> {
+    fn try_to_value(&self) -> Result<Value, dxr::Error> {
         match self {
             ParamValue::Value(v) => Ok(v.clone()),
             ParamValue::Array(arr) => arr.try_to_value(),
