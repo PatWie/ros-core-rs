@@ -43,6 +43,28 @@ implementation is inspired by the official chatter python example from the ROS
 wiki, which demonstrates a simple communication between two nodes using ROS
 messages.
 
+### TF Listener/Faker
+
+Subscribe to TF messages from an external ROS master:
+
+```bash
+RUST_LOG=info ROSRUST_MSG_PATH=`realpath messages` cargo run --example tf_listener
+```
+
+Publish fake TF transforms:
+
+```bash
+RUST_LOG=info ROSRUST_MSG_PATH=`realpath messages` cargo run --example tf_faker
+```
+
+Use `ROS_MASTER_URI` to connect to a different master (default: `http://localhost:11311`).
+
+Cross-compile for arm64:
+
+```bash
+ROSRUST_MSG_PATH=`realpath messages` cross build --example tf_listener --target aarch64-unknown-linux-gnu --release
+```
+
 ### Debugging with official ROS docker image
 
 To showcase that this ROS core implementation can be used with official ROS
@@ -74,9 +96,7 @@ contribute code, feel free to submit a pull request.
 
 
 ## Cross-compilation to arm64
+
 ```bash
-apt install libssl-dev:arm64
-export AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_LIB_DIR=/usr/lib/aarch64-linux-gnu/
-export AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_INCLUDE_DIR=/usr/include/aarch64-linux-gnu/
-cargo build --target aarch64-unknown-linux-gnu --release
+cross build --target aarch64-unknown-linux-gnu --release
 ```
